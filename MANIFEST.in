@@ -1,0 +1,14 @@
+include CHANGELOG.md
+include LICENSE
+include README.rst
+include TODO.rst
+include runtests.py
+include tests.py
+include playhouse/*.pyx
+include playhouse/*.c
+include playhouse/pskel
+include playhouse/README.md
+include playhouse/tests/README
+recursive-include examples *
+recursive-include docs *
+recursive-include playhouse/_pysqlite *

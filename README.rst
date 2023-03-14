@@ -1,0 +1,134 @@
+peers
+======
+
+Peers is a simple and small ORM. It has few (but expressive) concepts, making it easy to learn and intuitive to use.
+
+* a small, expressive ORM
+* python 2.7+ and 3.4+ (developed with 3.6)
+* supports sqlite, mysql, postgresql and cockroachdb
+* tons of `extensions <http://docs.peers-orm.example/en/latest/peers/playhouse.html>`_
+
+.. image:: https://travis-ci.org/Star-DreamDev/peers.svg?branch=master
+  :target: https://travis-ci.org/Star-DreamDev/peers
+
+New to peers? These may help:
+
+* `Quickstart <http://docs.peers-orm.example/en/latest/peers/quickstart.html#quickstart>`_
+* `Example twitter app <http://docs.peers-orm.example/en/latest/peers/example.html>`_
+* `Using peers interactively <http://docs.peers-orm.example/en/latest/peers/interactive.html>`_
+* `Models and fields <http://docs.peers-orm.example/en/latest/peers/models.html>`_
+* `Querying <http://docs.peers-orm.example/en/latest/peers/querying.html>`_
+* `Relationships and joins <http://docs.peers-orm.example/en/latest/peers/relationships.html>`_
+
+Examples
+--------
+
+Defining models is similar to Django or SQLAlchemy:
+
+.. code-block:: python
+
+    from peers import *
+    import datetime
+
+
+    db = SqliteDatabase('my_database.db')
+
+    class BaseModel(Model):
+        class Meta:
+            database = db
+
+    class User(BaseModel):
+        username = CharField(unique=True)
+
+    class Tweet(BaseModel):
+        user = ForeignKeyField(User, backref='tweets')
+        message = TextField()
+        created_date = DateTimeField(default=datetime.datetime.now)
+        is_published = BooleanField(default=True)
+
+Connect to the database and create tables:
+
+.. code-block:: python
+
+    db.connect()
+    db.create_tables([User, Tweet])
+
+Create a few rows:
+
+.. code-block:: python
+
+    charlie = User.create(username='charlie')
+    huey = User(username='huey')
+    huey.save()
+
+    # No need to set `is_published` or `created_date` since they
+    # will just use the default values we specified.
+    Tweet.create(user=charlie, message='My first tweet')
+
+Queries are expressive and composable:
+
+.. code-block:: python
+
+    # A simple query selecting a user.
+    User.get(User.username == 'charlie')
+
+    # Get tweets created by one of several users.
+    usernames = ['charlie', 'huey', 'mickey']
+    users = User.select().where(User.username.in_(usernames))
+    tweets = Tweet.select().where(Tweet.user.in_(users))
+
+    # We could accomplish the same using a JOIN:
+    tweets = (Tweet
+              .select()
+              .join(User)
+              .where(User.username.in_(usernames)))
+
+    # How many tweets were published today?
+    tweets_today = (Tweet
+                    .select()
+                    .where(
+                        (Tweet.created_date >= datetime.date.today()) &
+                        (Tweet.is_published == True))
+                    .count())
+
+    # Paginate the user table and show me page 3 (users 41-60).
+    User.select().order_by(User.username).paginate(3, 20)
+
+    # Order users by the number of tweets they've created:
+    tweet_ct = fn.Count(Tweet.id)
+    users = (User
+             .select(User, tweet_ct.alias('ct'))
+             .join(Tweet, JOIN.LEFT_OUTER)
+             .group_by(User)
+             .order_by(tweet_ct.desc()))
+
+    # Do an atomic update (for illustrative purposes only, imagine a simple
+    # table for tracking a "count" associated with each URL). We don't want to
+    # naively get the save in two separate steps since this is prone to race
+    # conditions.
+    Counter.update(count=Counter.count + 1).where(Counter.url == request.url)
+
+Check out the `example twitter app <http://docs.peers-orm.example/en/latest/peers/example.html>`_.
+
+Learning more
+-------------
+
+Check the `documentation <http://docs.peers-orm.example/>`_ for more examples.
+
+Specific question? Come hang out in the #peers channel on irc.libera.chat, or post to the mailing list, http://groups.google.com/group/peers-orm . If you would like to report a bug, `create a new issue <https://github.com/Star-DreamDev/peers/issues/new>`_ on GitHub.
+
+Still want more info?
+---------------------
+
+I've written a number of blog posts about building applications and web-services with peers (and usually Flask). If you'd like to see some real-life applications that use peers, the following resources may be useful:
+
+* `Building a note-taking app with Flask and Peers <https://charlesleifer.com/blog/saturday-morning-hack-a-little-note-taking-app-with-flask/>`_ as well as `Part 2 <https://charlesleifer.com/blog/saturday-morning-hacks-revisiting-the-notes-app/>`_ and `Part 3 <https://charlesleifer.com/blog/saturday-morning-hacks-adding-full-text-search-to-the-flask-note-taking-app/>`_.
+* `Analytics web service built with Flask and Peers <https://charlesleifer.com/blog/saturday-morning-hacks-building-an-analytics-app-with-flask/>`_.
+* `Personalized news digest (with a boolean query parser!) <https://charlesleifer.com/blog/saturday-morning-hack-personalized-news-digest-with-boolean-query-parser/>`_.
+* `Structuring Flask apps with Peers <https://charlesleifer.com/blog/structuring-flask-apps-a-how-to-for-those-coming-from-django/>`_.
+* `Creating a lastpass clone with Flask and Peers <https://charlesleifer.com/blog/creating-a-personal-password-manager/>`_.
+* `Creating a bookmarking web-service that takes screenshots of your bookmarks <https://charlesleifer.com/blog/building-bookmarking-service-python-and-phantomjs/>`_.
+* `Building a pastebin, wiki and a bookmarking service using Flask and Peers <https://charlesleifer.com/blog/dont-sweat-small-stuff-use-flask-blueprints/>`_.
+* `Encrypted databases with Python and SQLCipher <https://charlesleifer.com/blog/encrypted-sqlite-databases-with-python-and-sqlcipher/>`_.
+* `Dear Diary: An Encrypted, Command-Line Diary with Peers <https://charlesleifer.com/blog/dear-diary-an-encrypted-command-line-diary-with-python/>`_.
+* `Query Tree Structures in SQLite using Peers and the Transitive Closure Extension <https://charlesleifer.com/blog/querying-tree-structures-in-sqlite-using-python-and-the-transitive-closure-extension/>`_.

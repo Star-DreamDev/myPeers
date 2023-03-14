@@ -1,0 +1,61 @@
+language: python
+python:
+  - 2.7
+  - 3.4
+  - 3.5
+  - 3.6
+env:
+  - PEERS_TEST_BACKEND=sqlite
+  - PEERS_TEST_BACKEND=postgresql
+  - PEERS_TEST_BACKEND=mysql
+matrix:
+  include:
+    - python: 3.7
+      dist: xenial
+      env: PEERS_TEST_BACKEND=sqlite
+    - python: 3.7
+      dist: xenial
+      env: PEERS_TEST_BACKEND=postgresql
+    - python: 3.7
+      dist: xenial
+      env: PEERS_TEST_BACKEND=mysql
+    - python: 3.8
+      dist: xenial
+    - python: 3.7
+      dist: xenial
+      env:
+      - PEERS_TEST_BUILD_SQLITE=1
+      - PEERS_CLOSURE_EXTENSION=/usr/local/lib/closure.so
+      - LSM_EXTENSION=/usr/local/lib/lsm.so
+      before_install:
+        - sudo apt-get install -y tcl-dev
+        - ./.travis_deps.sh
+        - sudo ldconfig
+      script: "python runtests.py -v2"
+    - python: 3.7
+      dist: xenial
+      env:
+      - PEERS_TEST_BACKEND=cockroachdb
+      before_install:
+        - wget -qO- https://binaries.cockroachdb.com/cockroach-v20.1.1.linux-amd64.tgz | tar xvz
+        - ./cockroach-v20.1.1.linux-amd64/cockroach start --insecure --background
+        - ./cockroach-v20.1.1.linux-amd64/cockroach sql --insecure -e 'create database peers_test;'
+  allow_failures:
+addons:
+  postgresql: "9.6"
+  mariadb: "10.3"
+services:
+  - postgresql
+  - mariadb
+install: "pip install psycopg2-binary Cython pymysql apsw mysql-connector"
+before_script:
+  - python setup.py build_ext -i
+  - psql -c 'drop database if exists peers_test;' -U postgres
+  - psql -c 'create database peers_test;' -U postgres
+  - psql peers_test -c 'create extension hstore;' -U postgres
+  - mysql -e 'drop user if exists travis@localhost;'
+  - mysql -e 'create user travis@localhost;'
+  - mysql -e 'drop database if exists peers_test;'
+  - mysql -e 'create database peers_test;'
+  - mysql -e 'grant all on *.* to travis@localhost;' || true
+script: "python runtests.py"

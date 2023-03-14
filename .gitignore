@@ -1,0 +1,13 @@
+*.pyc
+build
+prof/
+docs/_build/
+playhouse/*.h
+playhouse/*.so
+playhouse/tests/peers_test.db
+.idea/
+MANIFEST
+peers_test.db
+closure.so
+lsm.so
+regexp.so
