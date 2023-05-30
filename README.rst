@@ -8,9 +8,6 @@ Peers is a simple and small ORM. It has few (but expressive) concepts, making it
 * supports sqlite, mysql, postgresql and cockroachdb
 * tons of `extensions <http://docs.peers-orm.example/en/latest/peers/playhouse.html>`_
 
-.. image:: https://travis-ci.org/Star-DreamDev/peers.svg?branch=master
-  :target: https://travis-ci.org/Star-DreamDev/peers
-
 New to peers? These may help:
 
 * `Quickstart <http://docs.peers-orm.example/en/latest/peers/quickstart.html#quickstart>`_
