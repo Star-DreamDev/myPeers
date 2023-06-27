@@ -12,6 +12,7 @@ except ImportError:
 from peers import ImproperlyConfigured
 from peers import Insert
 from peers import MySQLDatabase
+from peers import Node
 from peers import NodeList
 from peers import SQL
 from peers import TextField
@@ -85,13 +86,23 @@ class MariaDBConnectorDatabase(MySQLDatabase):
 class JSONField(TextField):
     field_type = 'JSON'
 
-    def db_value(self, value):
-        if value is not None:
-            return json.dumps(value)
+    def __init__(self, json_dumps=None, json_loads=None, **kwargs):
+        self._json_dumps = json_dumps or json.dumps
+        self._json_loads = json_loads or json.loads
+        super(JSONField, self).__init__(**kwargs)
 
     def python_value(self, value):
         if value is not None:
-            return json.loads(value)
+            try:
+                return self._json_loads(value)
+            except (TypeError, ValueError):
+                return value
+
+    def db_value(self, value):
+        if value is not None:
+            if not isinstance(value, Node):
+                value = self._json_dumps(value)
+            return value
 
 
 def Match(columns, expr, modifier=None):
