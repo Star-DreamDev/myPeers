@@ -13,7 +13,6 @@ from peers import Expression
 from peers import Node
 from peers import NodeList
 from peers import __deprecated__
-from peers import __exception_wrapper__
 
 try:
     from psycopg2cffi import compat
