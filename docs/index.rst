@@ -13,7 +13,7 @@ it easy to learn and intuitive to use.
 
 * a small, expressive ORM
 * python 2.7+ and 3.4+
-* supports sqlite, mysql, mariadb, postgresql and cockroachdb
+* supports sqlite, mysql, mariadb, postgresql.
 * :ref:`tons of extensions <playhouse>`
 
 .. image:: postgresql.png
@@ -31,10 +31,6 @@ it easy to learn and intuitive to use.
 .. image:: sqlite.png
     :target: peers/database.html#using-sqlite
     :alt: sqlite
-
-.. image:: crdb.png
-    :target: peers/database.html#using-crdb
-    :alt: cockroachdb
 
 Peers's source code hosted on `GitHub <https://github.com/Star-DreamDev/peers>`_.
 
