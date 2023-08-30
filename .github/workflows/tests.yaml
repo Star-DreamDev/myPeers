@@ -24,17 +24,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.8, 3.9, "3.11", "3.13"]
+        python-version: [3.8, "3.11", "3.13"]
         peers-backend:
           - "sqlite"
           - "postgresql"
           - "mysql"
-        exclude:
-          - python-version: 2.7
-            peers-backend: postgresql
-          - python-version: "3.13"
-            peers-backend: postgresql
         include:
+          - python-version: "3.9"
+            peers-backend: sqlite
           - python-version: "3.11"
             peers-backend: cockroachdb
           - python-version: "3.11"
@@ -42,8 +39,8 @@ jobs:
           - python-version: "3.13"
             peers-backend: psycopg3
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: deps
