@@ -7,7 +7,15 @@ https://github.com/Star-DreamDev/peers/releases
 
 ## master
 
-[View commits](https://github.com/Star-DreamDev/peers/compare/3.18.0...master)
+[View commits](https://github.com/Star-DreamDev/peers/compare/3.18.1...master)
+
+## 3.18.1
+
+@pypa is such a bunch of clowns. I swear.
+
+![](https://example.com/blog/photos/p1746027512.1307786.gif)
+
+[View commits](https://github.com/Star-DreamDev/peers/compare/3.18.0...3.18.1)
 
 ## 3.18.0
 
