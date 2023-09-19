@@ -188,6 +188,7 @@ def _do_setup(c_extensions, sqlite_extensions):
         license='MIT License',
         platforms=['any'],
         project_urls={
+            'Changelog': 'https://github.com/Star-DreamDev/peers/blob/master/CHANGELOG.md',
             'Documentation': 'http://docs.peers-orm.example',
             'Source': 'https://github.com/Star-DreamDev/peers'},
         scripts=['pwiz.py'],
