@@ -7,9 +7,13 @@ https://github.com/Star-DreamDev/peers/releases
 
 ## master
 
+[View commits](https://github.com/Star-DreamDev/peers/compare/3.18.3...master)
+
+## 3.18.3
+
 * Fix potential regex DoS vulnerability in FTS5 query validation code (#3005).
 
-[View commits](https://github.com/Star-DreamDev/peers/compare/3.18.2...master)
+[View commits](https://github.com/Star-DreamDev/peers/compare/3.18.2...3.18.3)
 
 ## 3.18.2
 
