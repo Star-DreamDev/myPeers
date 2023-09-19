@@ -38,6 +38,8 @@ jobs:
             peers-backend: psycopg3
           - python-version: "3.13"
             peers-backend: psycopg3
+          - python-version: "3.14"
+            peers-backend: sqlite
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
