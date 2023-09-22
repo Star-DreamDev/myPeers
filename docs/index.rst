@@ -14,6 +14,7 @@ it easy to learn and intuitive to use.
 * a small, expressive ORM
 * python 2.7+ and 3.4+
 * supports sqlite, mysql, mariadb, postgresql.
+* asyncio support
 * :ref:`tons of extensions <playhouse>`
 
 .. image:: postgresql.png
@@ -62,6 +63,7 @@ Contents:
    peers/relationships
    peers/api
    peers/sqlite_ext
+   peers/asyncio
    peers/playhouse
    peers/query_examples
    peers/query_builder

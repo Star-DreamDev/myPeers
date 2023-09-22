@@ -7,6 +7,10 @@ https://github.com/Star-DreamDev/peers/releases
 
 ## master
 
+* Adds preliminary support for `asyncio` via a new playhouse extension. See
+  [the documentation](http://docs.peers-orm.example/en/latest/peers/asyncio.html)
+  for details.
+
 [View commits](https://github.com/Star-DreamDev/peers/compare/3.19.0...master)
 
 ## 3.19.0

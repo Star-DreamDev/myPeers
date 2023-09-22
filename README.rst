@@ -6,6 +6,7 @@ Peers is a simple and small ORM. It has few (but expressive) concepts, making it
 * a small, expressive ORM
 * python 2.7+ and 3.4+
 * supports sqlite, mysql, mariadb, postgresql
+* asyncio support
 * tons of `extensions <http://docs.peers-orm.example/en/latest/peers/playhouse.html>`_
 
 New to peers? These may help:
@@ -31,6 +32,11 @@ backends can be installed using the following instead:
     pip install peers[mysql]  # Install peers with pymysql.
     pip install peers[postgres]  # Install peers with psycopg2.
     pip install peers[psycopg3]  # Install peers with psycopg3.
+
+    # AsyncIO implementations.
+    pip install peers[aiosqlite]  # Install peers with aiosqlite.
+    pip install peers[aiomysql]  # Install peers with aiomysql.
+    pip install peers[asyncpg]  # Install peers with asyncpg.
 
 Examples
 --------
