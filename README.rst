@@ -17,6 +17,21 @@ New to peers? These may help:
 * `Querying <http://docs.peers-orm.example/en/latest/peers/querying.html>`_
 * `Relationships and joins <http://docs.peers-orm.example/en/latest/peers/relationships.html>`_
 
+Installation:
+
+.. code-block:: console
+
+    pip install peers
+
+Sqlite comes built-in provided by the standard-lib ``sqlite3`` module. Other
+backends can be installed using the following instead:
+
+.. code-block:: console
+
+    pip install peers[mysql]  # Install peers with pymysql.
+    pip install peers[postgres]  # Install peers with psycopg2.
+    pip install peers[psycopg3]  # Install peers with psycopg3.
+
 Examples
 --------
 
