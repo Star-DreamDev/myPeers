@@ -1,3 +1,42 @@
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend="setuptools.build_meta"
+
+[project]
+name = "peers"
+dynamic = ["version"]
+description = "Peers — a little ORM"
+readme = "README.rst"
+authors = [
+    { name = "Star-DreamDev", email = "runninginthespace@gmail.com" }
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 2",
+    "Programming Language :: Python :: 3",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.scripts]
+pwiz = "pwiz:main"
+
+[project.urls]
+Repository = "https://github.com/Star-DreamDev/peers"
+Documentation = "https://docs.peers-orm.example/"
+Changelog = "https://github.com/Star-DreamDev/peers/blob/master/CHANGELOG.md"
+
+[project.optional-dependencies]
+mysql = ["pymysql"]
+postgres = ["psycopg2-binary"]
+psycopg3 = ["psycopg[binary]"]
+
+[tool.setuptools]
+packages = ["playhouse", "playhouse._pysqlite"]
+py-modules = ["peers", "pwiz"]
+exclude-package-data = {"playhouse" = ["*.c"]}
+
+[tool.setuptools.dynamic]
+version = { attr = "peers.__version__" }
