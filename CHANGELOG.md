@@ -10,6 +10,9 @@ https://github.com/Star-DreamDev/peers/releases
 * Adds preliminary support for `asyncio` via a new playhouse extension. See
   [the documentation](http://docs.peers-orm.example/en/latest/peers/asyncio.html)
   for details.
+* Adds new `ISODateTimeField` for Sqlite that encodes datetimes in ISO format
+  (more friendly when db is shared with other tools), and also properly reads
+  back UTC offset info.
 
 [View commits](https://github.com/Star-DreamDev/peers/compare/3.19.0...master)
 
