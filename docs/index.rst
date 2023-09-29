@@ -63,6 +63,7 @@ Contents:
    peers/relationships
    peers/api
    peers/sqlite_ext
+   peers/cysqlite_ext
    peers/asyncio
    peers/playhouse
    peers/query_examples
