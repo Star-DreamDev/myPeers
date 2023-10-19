@@ -29,9 +29,6 @@ using git:
     cd peers
     pip install .
 
-If you have the sqlite3 headers installed, then the sqlite C extensions will be
-built.
-
 Running tests
 -------------
 
