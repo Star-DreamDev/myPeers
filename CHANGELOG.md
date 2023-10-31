@@ -14,6 +14,9 @@ https://github.com/Star-DreamDev/peers/releases
 * Adds preliminary support for `asyncio` via a new playhouse extension. See
   [the documentation](http://docs.peers-orm.example/en/latest/peers/asyncio.html)
   for details.
+* `PostgresqlDatabase` can use `psycopg` (psycopg3) if it is installed. If both
+  psycopg2 and psycopg3 are installed, Peers will prefer psycopg2, but this
+  can be controlled by specifying `prefer_psycopg3=True` in the constructor.
 * Adds new `ISODateTimeField` for Sqlite that encodes datetimes in ISO format
   (more friendly when db is shared with other tools), and also properly reads
   back UTC offset info.
