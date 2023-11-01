@@ -4,7 +4,7 @@ peers
 Peers is a simple and small ORM. It has few (but expressive) concepts, making it easy to learn and intuitive to use.
 
 * a small, expressive ORM
-* python 2.7+ and 3.4+
+* flexible query-builder that exposes full power of SQL
 * supports sqlite, mysql, mariadb, postgresql
 * asyncio support
 * tons of `extensions <http://docs.peers-orm.example/en/latest/peers/playhouse.html>`_
