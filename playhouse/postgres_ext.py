@@ -9,7 +9,6 @@ from peers import Node
 from peers import NodeList
 from peers import Psycopg2Adapter
 from peers import Psycopg3Adapter
-from peers import __deprecated__
 from peers import __exception_wrapper__
 
 try:
@@ -522,9 +521,7 @@ class PostgresqlExtDatabase(PostgresqlDatabase):
             self._adapter.register_hstore(conn)
         return conn
 
-    def cursor(self, commit=None, named_cursor=None):
-        if commit is not None:
-            __deprecated__('"commit" has been deprecated and is a no-op.')
+    def cursor(self, named_cursor=None):
         if self.is_closed():
             if self.autoconnect:
                 self.connect()
@@ -534,10 +531,8 @@ class PostgresqlExtDatabase(PostgresqlDatabase):
             return self._adapter.server_side_cursor(self._state.conn)
         return self._state.conn.cursor()
 
-    def execute(self, query, commit=None, named_cursor=False, array_size=None,
+    def execute(self, query, named_cursor=False, array_size=None,
                 **context_options):
-        if commit is not None:
-            __deprecated__('"commit" has been deprecated and is a no-op.')
         ctx = self.get_sql_context(**context_options)
         sql, params = ctx.sql(query).query()
         named_cursor = named_cursor or (self._server_side_cursors and
@@ -547,9 +542,7 @@ class PostgresqlExtDatabase(PostgresqlDatabase):
             cursor = FetchManyCursor(cursor, array_size)
         return cursor
 
-    def execute_sql(self, sql, params=None, commit=None, named_cursor=None):
-        if commit is not None:
-            __deprecated__('"commit" has been deprecated and is a no-op.')
+    def execute_sql(self, sql, params=None, named_cursor=None):
         logger.debug((sql, params))
         with __exception_wrapper__:
             cursor = self.cursor(named_cursor=named_cursor)
