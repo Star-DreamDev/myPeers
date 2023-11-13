@@ -7,6 +7,9 @@ https://github.com/Star-DreamDev/peers/releases
 
 ## master
 
+* Ensure `gr_context` is set on greenlet in `greenlet_spawn` so that
+  contextvars will be operable in sync handlers.
+
 [View commits](https://github.com/Star-DreamDev/peers/compare/4.0.0...master)
 
 ## 4.0.0 (pending)
