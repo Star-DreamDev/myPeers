@@ -5,17 +5,18 @@ Installing and Testing
 
 Most users will want to simply install the latest version, hosted on PyPI:
 
-.. code-block:: console
+.. code-block:: shell
+   :emphasize-lines: 1
 
-    pip install peers
+   pip install peers
 
 Peers has optional Sqlite C extensions which are not bundled as part of the
 wheel. If you wish to use these, you can install Peers via source
 distribution:
 
-.. code-block:: console
+.. code-block:: shell
 
-    pip install peers --no-binary :all:
+   pip install peers --no-binary :all:
 
 Installing with git
 -------------------
@@ -23,37 +24,37 @@ Installing with git
 The project is hosted at https://github.com/Star-DreamDev/peers and can be installed
 using git:
 
-.. code-block:: console
+.. code-block:: shell
 
-    git clone https://github.com/Star-DreamDev/peers.git
-    cd peers
-    pip install .
+   git clone https://github.com/Star-DreamDev/peers.git
+   cd peers
+   pip install .
 
 Running tests
 -------------
 
 You can test your installation by running the test suite.
 
-.. code-block:: console
+.. code-block:: shell
 
-    python runtests.py
+   python runtests.py
 
 You can test specific features or specific database drivers using the
 ``runtests.py`` script. To view the available test runner options, use:
 
-.. code-block:: console
+.. code-block:: shell
 
-    python runtests.py --help
+   python runtests.py --help
 
 .. note::
-    To run tests against Postgres or MySQL you need to create a database named
-    "peers_test". To test the Postgres extension module, you will also want to
-    install the HStore extension in the postgres test database:
+   To run tests against Postgres or MySQL you need to create a database named
+   "peers_test". To test the Postgres extension module, you will also want to
+   install the HStore extension in the postgres test database:
 
-    .. code-block:: sql
+   .. code-block:: sql
 
-        -- install the hstore extension on the peers_test postgres db.
-        CREATE EXTENSION hstore;
+      -- install the hstore extension on the peers_test postgres db.
+      CREATE EXTENSION hstore;
 
 Driver support
 --------------
