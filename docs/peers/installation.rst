@@ -10,9 +10,8 @@ Most users will want to simply install the latest version, hosted on PyPI:
 
    pip install peers
 
-Peers has optional Sqlite C extensions which are not bundled as part of the
-wheel. If you wish to use these, you can install Peers via source
-distribution:
+Peers has an optional Sqlite C extension which is not bundled as part of the
+wheel. If you wish to use this, you can install Peers via source distribution:
 
 .. code-block:: shell
 
