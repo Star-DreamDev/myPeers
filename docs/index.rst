@@ -41,6 +41,7 @@ Contents:
    peers/quickstart
    peers/example
    peers/database
+   peers/transactions
    peers/models
    peers/querying
    peers/query_operators
