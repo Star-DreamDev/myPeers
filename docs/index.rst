@@ -18,22 +18,6 @@ it easy to learn and intuitive to use.
 * :ref:`tons of extensions <playhouse>`
 * use with :ref:`flask <flask>`, :ref:`fastapi <fastapi>` and :ref:`more <framework-integration>`
 
-.. image:: postgresql.png
-    :target: peers/database.html#using-postgresql
-    :alt: postgresql
-
-.. image:: mysql.png
-    :target: peers/database.html#using-mysql
-    :alt: mysql
-
-.. image:: mariadb.png
-    :target: peers/database.html#using-mariadb
-    :alt: mariadb
-
-.. image:: sqlite.png
-    :target: peers/database.html#using-sqlite
-    :alt: sqlite
-
 Peers's source code hosted on `GitHub <https://github.com/Star-DreamDev/peers>`_.
 
 New to peers? These may help:
@@ -56,8 +40,6 @@ Contents:
    peers/installation
    peers/quickstart
    peers/example
-   peers/interactive
-   peers/contributing
    peers/database
    peers/models
    peers/querying
@@ -71,11 +53,15 @@ Contents:
    peers/query_examples
    peers/query_builder
    peers/hacks
+   peers/interactive
+   peers/contributing
 
 Note
 ----
 
-If you find any bugs, odd behavior, or have an idea for a new feature please don't hesitate to `open an issue <https://github.com/Star-DreamDev/peers/issues?state=open>`_ on GitHub or `contact me <https://charlesleifer.com/contact/>`_.
+If you find any bugs, odd behavior, or have an idea for a new feature please
+don't hesitate to `open an issue <https://github.com/Star-DreamDev/peers/issues?state=open>`_
+on GitHub.
 
 Indices and tables
 ==================
