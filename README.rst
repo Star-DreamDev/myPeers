@@ -20,6 +20,8 @@ New to peers? These may help:
 * `Models and fields <http://docs.peers-orm.example/en/latest/peers/models.html>`_
 * `Querying <http://docs.peers-orm.example/en/latest/peers/querying.html>`_
 * `Relationships and joins <http://docs.peers-orm.example/en/latest/peers/relationships.html>`_
+* `Flask setup <https://docs.peers-orm.example/en/latest/peers/database.html#flask>`_
+  or `FastAPI setup <https://docs.peers-orm.example/en/latest/peers/database.html#fastapi>`_
 
 Installation:
 
