@@ -37,9 +37,9 @@ Contents:
    :maxdepth: 2
    :glob:
 
-   peers/installation
-   peers/quickstart
-   peers/example
+   new/installation
+   new/quickstart
+   new/tutorial
    peers/database
    peers/transactions
    peers/models
