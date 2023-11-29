@@ -8,6 +8,9 @@ Peers is a simple and small ORM. It has few (but expressive) concepts, making it
 * supports sqlite, mysql, mariadb, postgresql
 * asyncio support
 * tons of `extensions <http://docs.peers-orm.example/en/latest/peers/playhouse.html>`_
+* use with `flask <https://docs.peers-orm.example/en/latest/peers/database.html#flask>`_,
+  `fastapi <https://docs.peers-orm.example/en/latest/peers/database.html#fastapi>`_ and
+  `more <https://docs.peers-orm.example/en/latest/peers/database.html#framework-integration>`_.
 
 New to peers? These may help:
 
