@@ -40,22 +40,23 @@ Contents:
    new/installation
    new/quickstart
    new/tutorial
-   peers/database
-   peers/transactions
-   peers/models
-   peers/querying
-   peers/query_operators
-   peers/relationships
-   peers/api
-   peers/sqlite_ext
-   peers/cysqlite_ext
-   peers/asyncio
-   peers/playhouse
-   peers/query_examples
-   peers/query_builder
-   peers/hacks
-   peers/interactive
-   peers/contributing
+   new/database
+   new/models
+   new/relationships
+   new/querying
+   new/writing
+   new/transactions
+   new/schema
+   new/query_operators
+   new/recipes
+   new/asyncio
+   new/framework_integration
+   new/interactive
+   new/query_builder
+   new/api
+   new/playhouse/index
+   new/query_examples
+   new/contributing
 
 Note
 ----
