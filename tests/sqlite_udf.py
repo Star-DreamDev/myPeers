@@ -4,7 +4,6 @@ import random
 
 from peers import *
 from peers import sqlite3
-from playhouse.sqlite_ext import SqliteExtDatabase
 from playhouse.sqlite_udf import register_all
 
 from .base import IS_SQLITE_9
