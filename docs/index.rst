@@ -23,7 +23,7 @@ Peers's source code hosted on `GitHub <https://github.com/Star-DreamDev/peers>`_
 New to peers? These may help:
 
 * :ref:`Quickstart <quickstart>`
-* :ref:`Example twitter app <tutorial>`
+* :ref:`Example twitter app <example>`
 * :ref:`Using peers interactively <interactive>`
 * :ref:`Models and fields <models>`
 * :ref:`Querying <querying>`
@@ -38,7 +38,7 @@ Contents:
 
    peers/installation
    peers/quickstart
-   peers/tutorial
+   peers/example
    peers/database
    peers/models
    peers/relationships
