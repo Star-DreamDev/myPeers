@@ -17,6 +17,7 @@ from peers import NodeList
 from peers import SQL
 from peers import TextField
 from peers import fn
+from playhouse.pool import _PooledMySQLDatabase
 
 
 class MySQLConnectorDatabase(MySQLDatabase):
@@ -36,6 +37,11 @@ class MySQLConnectorDatabase(MySQLDatabase):
 
     def get_binary_type(self):
         return mysql_connector.Binary
+
+
+class PooledMySQLConnectorDatabase(_PooledMySQLDatabase,
+                                   MySQLConnectorDatabase):
+    pass
 
 
 class MariaDBConnectorDatabase(MySQLDatabase):
@@ -76,6 +82,11 @@ class MariaDBConnectorDatabase(MySQLDatabase):
 
     def get_binary_type(self):
         return mariadb.Binary
+
+
+class PooledMariaDBConnectorDatabase(_PooledMySQLDatabase,
+                                     MariaDBConnectorDatabase):
+    pass
 
 
 class JSONField(TextField):

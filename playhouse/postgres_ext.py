@@ -11,6 +11,7 @@ from peers import NodeList
 from peers import Psycopg2Adapter
 from peers import Psycopg3Adapter
 from peers import __exception_wrapper__
+from playhouse.pool import _PooledPostgresqlDatabase
 
 try:
     from psycopg2cffi import compat
@@ -571,7 +572,15 @@ class PostgresqlExtDatabase(PostgresqlDatabase):
         return cursor
 
 
+class PooledPostgresqlExtDatabase(_PooledPostgresqlDatabase, PostgresqlExtDatabase):
+    pass
+
+
 class Psycopg3Database(PostgresqlExtDatabase):
     def __init__(self, *args, **kwargs):
         kwargs['prefer_psycopg3'] = True
         super(Psycopg3Database, self).__init__(*args, **kwargs)
+
+
+class PooledPsycopg3Database(_PooledPostgresqlDatabase, Psycopg3Database):
+    pass
