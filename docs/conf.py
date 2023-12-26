@@ -106,6 +106,7 @@ html_theme_options = {
     'github_user': 'Star-DreamDev',
     'github_repo': 'peers',
     'page_width': '1000px',
+    'sidebar_width': '240px',
     'font_size': '15px',
 }
 

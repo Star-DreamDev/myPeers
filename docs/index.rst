@@ -15,7 +15,7 @@ it easy to learn and intuitive to use.
 * flexible query-builder that exposes full power of SQL
 * supports sqlite, mysql, mariadb, postgresql.
 * asyncio support
-* :ref:`tons of extensions <playhouse>`
+* tons of extensions
 * use with :ref:`flask <flask>`, :ref:`fastapi <fastapi>` and :ref:`more <framework-integration>`
 
 Peers's source code hosted on `GitHub <https://github.com/Star-DreamDev/peers>`_.
@@ -23,7 +23,7 @@ Peers's source code hosted on `GitHub <https://github.com/Star-DreamDev/peers>`_
 New to peers? These may help:
 
 * :ref:`Quickstart <quickstart>`
-* :ref:`Example twitter app <example-app>`
+* :ref:`Example twitter app <tutorial>`
 * :ref:`Using peers interactively <interactive>`
 * :ref:`Models and fields <models>`
 * :ref:`Querying <querying>`
@@ -35,30 +35,31 @@ Contents:
 
 .. toctree::
    :maxdepth: 2
-   :glob:
 
-   new/installation
-   new/quickstart
-   new/tutorial
-   new/database
-   new/models
-   new/relationships
-   new/querying
-   new/writing
-   new/transactions
-   new/schema
-   new/query_operators
-   new/recipes
-   new/asyncio
-   new/framework_integration
-   new/interactive
-   new/query_builder
-   new/api
-   new/sqlite
-   new/postgres
-   new/mysql
-   new/query_examples
-   new/contributing
+   peers/installation
+   peers/quickstart
+   peers/tutorial
+   peers/database
+   peers/models
+   peers/relationships
+   peers/querying
+   peers/writing
+   peers/transactions
+   peers/schema
+   peers/query_operators
+   peers/asyncio
+   peers/framework_integration
+   peers/interactive
+   peers/query_builder
+   peers/api
+   peers/sqlite
+   peers/postgres
+   peers/mysql
+   peers/db_tools
+   peers/orm_utils
+   peers/query_library
+   peers/recipes
+   peers/contributing
 
 Note
 ----

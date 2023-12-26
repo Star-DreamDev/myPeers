@@ -50,16 +50,16 @@ table. The model class then defines one or more field attributes which
 correspond to the table's columns. For the twitter clone, there are three
 models:
 
-*User*:
+**User**:
     Represents a user account and stores the username and password, an email
     address for generating avatars using *gravatar* and a datetime field
     indicating when that account was created.
 
-*Relationship*:
+**Relationship**:
     This is a utility model that contains two foreign-keys to
     the *User* model and stores which users follow one another.
 
-*Message*:
+**Message**:
     Analogous to a tweet. The Message model stores the text content of
     the tweet, when it was created, and who posted it (foreign key to User).
 
@@ -244,7 +244,10 @@ Flask provides connection setup/teardown hooks via decorators:
 
 .. note::
    Peers uses thread local storage to manage connection state, so this
-   pattern can be used with multi-threaded WSGI servers.
+   pattern can be used with multi-threaded or gevent WSGI servers.
+
+   Peers's :ref:`asyncio integration <asyncio>` stores connection state in
+   task-local storage, so the same pattern applies.
 
 Making queries
 --------------
@@ -279,10 +282,10 @@ Storing data
 ------------
 
 When a new user wants to join the site we need to make sure the username is
-available, and if so, create a new *User* record. Looking at the *join()* view,
-we can see that our application attempts to create the User using
-:meth:`Model.create`. *User.username* field has a unique constraint, so if
-the username is taken the database will raise an ``IntegrityError``.
+available, and if so, create a new ``User`` record. Looking at the ``join()``
+view, we can see that our application attempts to create the ``User`` using
+:meth:`Model.create`. ``User.username`` field has a unique constraint, so if
+the username is taken the database will raise an :class:`IntegrityError`.
 
 .. code-block:: python
 
@@ -304,9 +307,9 @@ the username is taken the database will raise an ``IntegrityError``.
        flash('That username is already taken')
 
 We will use a similar approach when a user wishes to follow someone. To
-indicate a following relationship, we create a row in the *Relationship* table
-pointing from one user to another. Due to the unique index on ``from_user`` and
-``to_user``, we will be sure not to end up with duplicate rows:
+indicate a following relationship, we create a row in the ``Relationship``
+table pointing from one user to another. Due to the unique index on
+``(from_user, to_user)``, we will be sure not to end up with duplicate rows:
 
 .. code-block:: python
 
@@ -327,11 +330,11 @@ the users that you follow. In order to implement this cleanly, we can use a
 subquery:
 
 .. note::
-   The subquery, ``user.following()``, by default would ordinarily select all
-   the columns on the ``User`` model. Because we're using it as a subquery,
-   peers only selects the primary key.
+   ``user.following()`` will automatically only select ``User.id`` when it used
+   in a subquery.
 
 .. code-block:: python
+   :emphasize-lines: 5
 
    # python code
    user = get_current_user()
@@ -408,7 +411,7 @@ mentioning briefly.
 .. tip::
    To avoid having to frequently copy/paste :func:`object_list` or
    :func:`get_object_or_404`, these functions are included as part of the
-   playhouse :ref:`flask extension module <flask_utils>`.
+   playhouse :ref:`flask extension module <flask-utils>`.
 
    .. code-block:: python
 
