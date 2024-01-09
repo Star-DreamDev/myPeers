@@ -47,6 +47,8 @@ Methods which will be discussed:
 |                 | * :meth:`Model.delete`                                    |
 +-----------------+-----------------------------------------------------------+
 
+.. seealso:: :ref:`Extensive library of SQL / Peers examples <query-library>`
+
 .. _inserting-records:
 
 Inserting Records

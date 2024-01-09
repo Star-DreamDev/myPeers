@@ -28,6 +28,7 @@ New to peers? These may help:
 * :ref:`Models and fields <models>`
 * :ref:`Querying <querying>`
 * :ref:`Relationships and joins <relationships>`
+* :ref:`Extensive library of SQL / Peers examples <query-library>`
 * :ref:`Flask setup <flask>` or :ref:`FastAPI setup <fastapi>`
 
 Contents:
