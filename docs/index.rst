@@ -45,20 +45,20 @@ Contents:
    peers/relationships
    peers/querying
    peers/writing
+   peers/query_operators
    peers/transactions
    peers/schema
-   peers/query_operators
    peers/asyncio
    peers/framework_integration
    peers/interactive
    peers/query_builder
+   peers/query_library
    peers/api
    peers/sqlite
    peers/postgres
    peers/mysql
    peers/db_tools
    peers/orm_utils
-   peers/query_library
    peers/recipes
    peers/contributing
 
