@@ -21,8 +21,8 @@ New to peers? These may help:
 * `Querying <http://docs.peers-orm.example/en/latest/peers/querying.html>`_
 * `Relationships and joins <http://docs.peers-orm.example/en/latest/peers/relationships.html>`_
 * `Extensive library of SQL / Peers examples <https://docs.peers-orm.example/en/latest/peers/query_library.html#query-library>`_
-* `Flask setup <https://docs.peers-orm.example/en/latest/peers/database.html#flask>`_
-  or `FastAPI setup <https://docs.peers-orm.example/en/latest/peers/database.html#fastapi>`_
+* `Flask setup <https://docs.peers-orm.example/en/latest/peers/framework_integration.html#flask>`_
+  or `FastAPI setup <https://docs.peers-orm.example/en/latest/peers/framework_integration.html#fastapi>`_
 
 Installation:
 
