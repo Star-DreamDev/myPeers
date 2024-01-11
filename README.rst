@@ -7,19 +7,20 @@ Peers is a simple and small ORM. It has few (but expressive) concepts, making it
 * flexible query-builder that exposes full power of SQL
 * supports sqlite, mysql, mariadb, postgresql
 * asyncio support
-* tons of `extensions <http://docs.peers-orm.example/en/latest/peers/playhouse.html>`_
-* use with `flask <https://docs.peers-orm.example/en/latest/peers/database.html#flask>`_,
-  `fastapi <https://docs.peers-orm.example/en/latest/peers/database.html#fastapi>`_ and
-  `more <https://docs.peers-orm.example/en/latest/peers/database.html#framework-integration>`_.
+* tons of extensions
+* use with `flask <https://docs.peers-orm.example/en/latest/peers/framework_integration.html#flask>`_
+  `fastapi <https://docs.peers-orm.example/en/latest/peers/framework_integration.html#fastapi>`_ and
+  `more <https://docs.peers-orm.example/en/latest/peers/framework_integration.html>`_.
 
 New to peers? These may help:
 
-* `Quickstart <http://docs.peers-orm.example/en/latest/peers/quickstart.html#quickstart>`_
-* `Example twitter app <http://docs.peers-orm.example/en/latest/peers/example.html>`_
-* `Using peers interactively <http://docs.peers-orm.example/en/latest/peers/interactive.html>`_
+* `Quickstart <https://docs.peers-orm.example/en/latest/peers/quickstart.html#quickstart>`_
+* `Example twitter app <https://docs.peers-orm.example/en/latest/peers/example.html#example>`_
+* `Using peers interactively <https://docs.peers-orm.example/en/latest/peers/interactive.html#interactive>`_
 * `Models and fields <http://docs.peers-orm.example/en/latest/peers/models.html>`_
 * `Querying <http://docs.peers-orm.example/en/latest/peers/querying.html>`_
 * `Relationships and joins <http://docs.peers-orm.example/en/latest/peers/relationships.html>`_
+* `Extensive library of SQL / Peers examples <https://docs.peers-orm.example/en/latest/peers/query_library.html#query-library>`_
 * `Flask setup <https://docs.peers-orm.example/en/latest/peers/database.html#flask>`_
   or `FastAPI setup <https://docs.peers-orm.example/en/latest/peers/database.html#fastapi>`_
 
@@ -154,4 +155,3 @@ I've written a number of blog posts about building applications and web-services
 * `Building a pastebin, wiki and a bookmarking service using Flask and Peers <https://charlesleifer.com/blog/dont-sweat-small-stuff-use-flask-blueprints/>`_.
 * `Encrypted databases with Python and SQLCipher <https://charlesleifer.com/blog/encrypted-sqlite-databases-with-python-and-sqlcipher/>`_.
 * `Dear Diary: An Encrypted, Command-Line Diary with Peers <https://charlesleifer.com/blog/dear-diary-an-encrypted-command-line-diary-with-python/>`_.
-* `Query Tree Structures in SQLite using Peers and the Transitive Closure Extension <https://charlesleifer.com/blog/querying-tree-structures-in-sqlite-using-python-and-the-transitive-closure-extension/>`_.
