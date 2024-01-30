@@ -58,11 +58,12 @@ class Json(Node):
     # Fallback JSON handler.
     __slots__ = ('value',)
 
-    def __init__(self, value):
+    def __init__(self, value, dumps=None):
         self.value = value
+        self.dumps = dumps or json.dumps
 
     def __sql__(self, ctx):
-        return ctx.value(self.value, json.dumps)
+        return ctx.value(self.value, self.dumps)
 
 
 class _LookupNode(ColumnBase):
