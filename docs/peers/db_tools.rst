@@ -179,7 +179,7 @@ returns it to the pool rather than actually disconnecting.
 .. include:: pool-snippet.rst
 
 .. note::
-   Applications using Peers's :ref:`asyncio integration <asyncio>` do not need to
+   Applications using Peers's :ref:`asyncio integration <pwasyncio>` do not need to
    use a special pooled database - the Async databases use a connection pool by
    default.
 

@@ -481,7 +481,7 @@ See :ref:`framework-integration` for framework-specific examples.
    Peers uses thread local storage to manage connection state, so this
    pattern can be used with multi-threaded or gevent applications.
 
-   Peers's :ref:`asyncio integration <asyncio>` stores connection state in
+   Peers's :ref:`asyncio integration <pwasyncio>` stores connection state in
    task-local storage, so the same pattern applies.
 
 Context managers
@@ -559,7 +559,7 @@ the Peers :class:`Database` object safe to use with multiple threads. Each
 thread will have it's own connection, and as a result any given thread will
 only have a single connection open at a given time.
 
-Peers's :ref:`asyncio integration <asyncio>` stores connection state in
+Peers's :ref:`asyncio integration <pwasyncio>` stores connection state in
 task-local storage, so the same applies to async applications.
 
 DB-API Connection object
