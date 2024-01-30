@@ -18,11 +18,11 @@ a pre-existing Sqlite database with the following simple schema:
 To experiment with querying this database from an interactive interpreter
 session, we would start our interpreter and import the following helpers:
 
-* ``peers.SqliteDatabase`` - to reference the "events.db"
-* ``playhouse.reflection.generate_models`` - to generate models from an
+* :class:`SqliteDatabase` - to reference the "events.db"
+* :func:`playhouse.reflection.generate_models` - to generate models from an
   existing database.
-* ``playhouse.reflection.print_model`` - to view the model definition.
-* ``playhouse.reflection.print_table_sql`` - to view the table SQL.
+* :func:`playhouse.reflection.print_model` - to view the model definition.
+* :func:`playhouse.reflection.print_table_sql` - to view the table SQL.
 
 Our terminal session might look like this:
 
@@ -32,7 +32,7 @@ Our terminal session might look like this:
    >>> from playhouse.reflection import generate_models, print_model, print_table_sql
    >>>
 
-The :func:`generate_models` function will introspect the database and
+The :func:`~playhouse.reflection.generate_models` function will introspect the database and
 generate model classes for all the tables that are found. This is a handy way
 to get started and can save a lot of typing. The function returns a dictionary
 keyed by the table name, with the generated model as the corresponding value:
@@ -49,7 +49,7 @@ keyed by the table name, with the generated model as the corresponding value:
    <Model: event>
 
 To take a look at the model definition, which lists the model's fields and
-data-type, we can use the :func:`print_model` function:
+data-type, we can use the :func:`~playhouse.reflection.print_model` function:
 
 .. code-block:: pycon
 
@@ -112,9 +112,9 @@ constraints, etc.
 
 The APIs discussed in this section:
 
-* :func:`generate_models`
-* :func:`print_model`
-* :func:`print_table_sql`
+* :func:`~playhouse.reflection.generate_models`
+* :func:`~playhouse.reflection.print_model`
+* :func:`~playhouse.reflection.print_table_sql`
 
 More low-level APIs are also available on the :class:`Database` instance:
 

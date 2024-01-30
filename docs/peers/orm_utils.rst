@@ -16,14 +16,14 @@ and work with any database backend.
 Shortcuts
 ---------
 
+.. module:: playhouse.shortcuts
+
 ``playhouse.shortcuts`` provides helpers for serializing model instances to
 and from dictionaries, resolving compound queries, and thread-safe database
 swapping.
 
 Model Serialization
 ^^^^^^^^^^^^^^^^^^^
-
-.. module:: playhouse.shortcuts
 
 .. function:: model_to_dict(model, recurse=True, backrefs=False, only=None, exclude=None, extra_attrs=None, fields_from_query=None, max_depth=None, manytomany=False)
 
@@ -142,10 +142,10 @@ Thread-Safe Database Swapping
 
 .. _hybrid:
 
-.. module:: playhouse.hybrid
-
 Hybrid Attributes
 -----------------
+
+.. module:: playhouse.hybrid
 
 A *hybrid attribute* behaves differently depending on whether it is accessed
 on a model **instance** (executes Python logic) or on the model **class**
@@ -304,10 +304,10 @@ This query is equivalent to the following SQL:
 
 .. _kv:
 
-.. module:: playhouse.kv
-
 Key/Value Store
 ---------------
+
+.. module:: playhouse.kv
 
 ``playhouse.kv.KeyValue`` provides a persistent dictionary backed by a Peers
 database instance.
@@ -492,10 +492,10 @@ database instance.
 
 .. _signals:
 
-.. module:: playhouse.signals
-
 Signals
 -------
+
+.. module:: playhouse.signals
 
 ``playhouse.signals`` adds Django-style model lifecycle signals. Models must
 subclass ``playhouse.signals.Model`` (not ``peers.Model``) for hooks to fire.
@@ -635,10 +635,10 @@ Signal callback signature:
 
 .. _dataset:
 
-.. module:: playhouse.dataset
-
 DataSet
 -------
+
+.. module:: playhouse.dataset
 
 ``playhouse.dataset`` exposes a dict-oriented API for relational data, modeled
 after the `dataset library <https://dataset.readthedocs.io/>`_. It is useful
@@ -852,10 +852,10 @@ Introspection:
 
 .. _extra-fields:
 
-.. module:: playhouse.fields
-
 Extra Field Types
 -----------------
+
+.. module:: playhouse.fields
 
 ``playhouse.fields`` provides two general-purpose field types.
 
@@ -890,10 +890,10 @@ Extra Field Types
 
 .. _flask-utils:
 
-.. module:: playhouse.flask_utils
-
 Flask Utilities
 ---------------
+
+.. module:: playhouse.flask_utils
 
 ``playhouse.flask_utils`` simplifies Peers integration with
 `Flask <https://flask.palletsprojects.com/>`_.

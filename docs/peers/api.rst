@@ -1027,7 +1027,7 @@ Database
          # Load extension in closure.so shared library.
          db.load_extension('closure')
 
-   .. method:: unload_extension(extension_module):
+   .. method:: unload_extension(extension_module)
 
       Unregister extension from being automatically loaded on new connections.
 
@@ -2417,7 +2417,7 @@ Model
          mapped correctly.
 
 
-.. class:: DoesNotExist(Exception)
+.. class:: DoesNotExist
 
    Base exception class raised when a call to :meth:`Model.get` (or other
    ``.get()`` method) fails to return a matching result. Model classes have a
@@ -2430,6 +2430,27 @@ Model
               return User.get(fn.LOWER(User.email) == email.lower())
           except User.DoesNotExist:
               return None
+
+
+.. class:: PeersException
+
+   Base exception class for wrapped DB-API exceptions.
+
+.. class:: ImproperlyConfigured
+
+   Exception raised for configuration issues like missing drivers.
+
+.. class:: DatabaseError
+           DataError
+           IntegrityError
+           InterfaceError
+           InternalError
+           NotSupportedError
+           OperationalError
+           ProgrammingError
+
+   Exception wrappers for DB-API errors raised by the driver. Allows users to
+   catch the Peers exception wrappers rather than the driver-specific types.
 
 
 .. _fields-api:
@@ -5674,6 +5695,47 @@ Constants and Helpers
       # 0, 1, 2, 3
       # 4, 5, 6, 7
       # 8, 9
+
+
+.. class:: IndexMetadata
+
+   Metadata for indexes returned by :meth:`Database.get_indexes`
+
+   .. data:: name
+             sql
+             columns
+             unique
+             table
+
+
+.. class:: ColumnMetadata
+
+   Metadata for columns returned by :meth:`Database.get_columns`
+
+   .. data:: name
+             data_type
+             null
+             primary_key
+             table
+             default
+
+
+.. class:: ForeignKeyMetadata
+
+   Metadata for foreign keys returned by :meth:`Database.get_foreign_keys`
+
+   .. data:: column
+             dest_table
+             dest_column
+             table
+
+
+.. class:: ViewMetadata
+
+   Metadata for views returned by :meth:`Database.get_views`
+
+   .. data:: name
+             sql
 
 
 Playhouse Reference

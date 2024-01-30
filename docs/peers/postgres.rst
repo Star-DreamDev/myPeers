@@ -3,6 +3,8 @@
 Postgresql
 ==========
 
+.. module:: playhouse.postgres_ext
+
 The ``playhouse.postgres_ext`` module exposes Postgresql-specific field types
 and features that are not available in the standard :class:`PostgresqlDatabase`.
 
@@ -750,13 +752,15 @@ For more granular control or to close the cursor explicitly:
    :param select_query: a :class:`SelectQuery` instance.
    :rtype generator:
 
-   Wrap ``select_query`` in a transaction and iterate using :meth:`~SelectQuery.iterator`
+   Wrap ``select_query`` in a transaction and iterate using :meth:`~BaseQuery.iterator`
    (disables row caching).
 
 .. _crdb:
 
 CockroachDB
 -----------
+
+.. module:: playhouse.cockroachdb
 
 `CockroachDB <https://www.cockroachlabs.com>`_ (CRDB) is compatible with
 Postgresql's wire protocol and is well-supported by Peers. Use the dedicated
@@ -804,13 +808,13 @@ Key differences from Postgresql
 
 Special field-types that may be useful when using CRDB:
 
-* :class:`UUIDKeyField` - a primary-key field implementation that uses
+* :class:`~playhouse.cockroachdb.UUIDKeyField` - a primary-key field implementation that uses
   CRDB's ``UUID`` type with a default randomly-generated UUID.
-* :class:`RowIDField` - a primary-key field implementation that uses CRDB's
+* :class:`~playhouse.cockroachdb.RowIDField` - a primary-key field implementation that uses CRDB's
   ``INT`` type with a default ``unique_rowid()``.
-* :class:`JSONField` - same as the Postgres :class:`BinaryJSONField`, as
+* :class:`~playhouse.postgres_ext.JSONField` - same as the Postgres :class:`~playhouse.postgres_ext.BinaryJSONField`, as
   CRDB treats all JSON as JSONB.
-* :class:`ArrayField` - same as the Postgres extension (but does not support
+* :class:`~playhouse.postgres_ext.ArrayField` - same as the Postgres extension (but does not support
   multi-dimensional arrays).
 
 Transactions:

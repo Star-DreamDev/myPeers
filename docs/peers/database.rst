@@ -187,8 +187,8 @@ and :ref:`framework-integration`.
 
 Alternate drivers are available for both databases:
 
-* :class:`MySQLConnectorDatabase` - uses ``mysql-connector-python``.
-* :class:`MariaDBConnectorDatabase` - uses ``mariadb-connector-python``.
+* :class:`.MySQLConnectorDatabase` - uses ``mysql-connector-python``.
+* :class:`.MariaDBConnectorDatabase` - uses ``mariadb-connector-python``.
 
 .. seealso::
    For MySQL-specific functionality and extensions, see :ref:`mysql`.
@@ -255,7 +255,7 @@ There are three ways to initialize a database:
           host=os.environ.get('PGHOST') or '127.0.0.1')
 
 2. **Defer initialization**. This method is needed when a connection setting is not
-   available until run-time or it is inconvenient to import connection settings
+   available until run-time **or** it is inconvenient to import connection settings
    where the database is declared:
 
    .. code-block:: python
@@ -366,7 +366,7 @@ for binding a given model class:
    Peers database connections are thread-safe. However, if you plan to **bind**
    the database at run-time in a multi-threaded application, storing the model's
    database in a thread-local is necessary. This can be accomplished with
-   the :class:`ThreadSafeDatabaseMetadata` included in ``playhouse.shortcuts``:
+   the :class:`~playhouse.shortcuts.ThreadSafeDatabaseMetadata`.
 
    .. code-block:: python
 
@@ -641,16 +641,16 @@ implementation-specific exception classes. That way, you don't need to worry
 about dealing with driver-specific exception classes, you can just use the ones
 from peers:
 
-* ``DatabaseError``
-* ``DataError``
-* ``IntegrityError``
-* ``InterfaceError``
-* ``InternalError``
-* ``NotSupportedError``
-* ``OperationalError``
-* ``ProgrammingError``
+* :class:`DatabaseError`
+* :class:`DataError`
+* :class:`IntegrityError`
+* :class:`InterfaceError`
+* :class:`InternalError`
+* :class:`NotSupportedError`
+* :class:`OperationalError`
+* :class:`ProgrammingError`
 
-.. note:: All of these error classes extend ``PeersException``.
+.. note:: All of these error classes extend :class:`PeersException`.
 
 Logging Queries
 ---------------

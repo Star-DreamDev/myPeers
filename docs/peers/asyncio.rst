@@ -1,5 +1,7 @@
 .. _asyncio:
 
+.. module:: playhouse.pwasyncio
+
 Async Support
 =============
 
@@ -442,8 +444,7 @@ API Reference
    Uses ``aiosqlite`` and maintains a single shared connection. Pool-related
    configuration options are ignored.
 
-   Inherits from :class:`AsyncDatabaseMixin` and
-   :class:`peers.SqliteDatabase`.
+   Inherits from :class:`AsyncDatabaseMixin` and :class:`SqliteDatabase`.
 
 .. class:: AsyncPostgresqlDatabase(database, **kwargs)
 
@@ -451,8 +452,7 @@ API Reference
 
    Uses ``asyncpg`` and the driver's native connection pool.
 
-   Inherits from :class:`AsyncDatabaseMixin` and
-   :class:`peers.PostgresqlDatabase`.
+   Inherits from :class:`AsyncDatabaseMixin` and :class:`PostgresqlDatabase`.
 
 .. class:: AsyncMySQLDatabase(database, **kwargs)
 
@@ -460,8 +460,7 @@ API Reference
 
    Uses ``aiomysql`` and the driver's native connection pool.
 
-   Inherits from :class:`AsyncDatabaseMixin` and
-   :class:`peers.MySQLDatabase`.
+   Inherits from :class:`AsyncDatabaseMixin` and :class:`MySQLDatabase`.
 
 .. class:: MissingGreenletBridge(RuntimeError)
 

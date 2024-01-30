@@ -80,7 +80,7 @@ note's :class:`Table` constructor will be selected. This won't work for
 Reminder, as we didn't specify any columns at all.
 
 To select all notes published in 2018 along with the name of the creator, we
-will use :meth:`~BaseQuery.join`. We'll also request that rows be returned
+will use :meth:`~Select.join`. We'll also request that rows be returned
 as *namedtuple* objects:
 
 .. code-block:: python

@@ -26,7 +26,7 @@ Implementations
    Full-text search and JSON implementations available in
    ``playhouse.sqlite_ext``.
 
-:class:`CySqliteDatabase` (``playhouse.cysqlite_ext``)
+:class:`~playhouse.cysqlite_ext.CySqliteDatabase` (``playhouse.cysqlite_ext``)
    Extends :class:`SqliteDatabase`, uses `cysqlite <https://cysqlite.readthedocs.io/en/latest/>`__ driver.
 
    * All above functionality
@@ -36,19 +36,19 @@ Implementations
    * Online backups
    * Can be built `with encryption <https://cysqlite.readthedocs.io/en/latest/installation.html#sqlcipher>`__.
 
-:class:`APSWDatabase` (``playhouse.apsw_ext``)
+:class:`~playhouse.apsw_ext.APSWDatabase` (``playhouse.apsw_ext``)
    Extends :class:`SqliteDatabase`, uses `apsw <https://github.com/rogerbinns/apsw/>`__ driver.
 
    APSW is a thin C-level driver that exposes the full range of SQLite
    functionality.
 
-:class:`SqlCipherDatabase` (``playhouse.sqlcipher_ext``)
+:class:`~playhouse.sqlcipher_ext.SqlCipherDatabase` (``playhouse.sqlcipher_ext``)
    Extends :class:`SqliteDatabase`, uses `sqlcipher3 <https://github.com/coleifer/sqlcipher3>`__ driver.
 
    SQLCipher provides transparent full-database encryption using 256-bit AES,
    ensuring data on-disk is secure.
 
-:class:`SqliteQueueDatabase` (``playhouse.sqliteq``)
+:class:`~playhouse.sqliteq.SqliteQueueDatabase` (``playhouse.sqliteq``)
    Extends :class:`SqliteDatabase`.
 
    Provides a SQLite database implementation with a long-lived background
@@ -144,8 +144,8 @@ Collations
 Table Functions
    User-defined tables (requres ``cysqlite``).
 
-   * :meth:`CySqliteDatabase.register_table_function`
-   * :meth:`CySqliteDatabase.table_function` - decorator.
+   * :meth:`.CySqliteDatabase.register_table_function`
+   * :meth:`.CySqliteDatabase.table_function` - decorator.
 
 Shared Libraries
    Load an extension from a shared library.
@@ -381,6 +381,8 @@ documentation.
 CySqlite
 --------
 
+.. module:: playhouse.cysqlite_ext
+
 :class:`CySqliteDatabase` uses the `cysqlite <https://cysqlite.readthedocs.io>`_
 driver, a high-performance alternative to the standard library ``sqlite3``
 module. ``cysqlite`` provides additional features and hooks not available with
@@ -474,12 +476,26 @@ Usage:
          # 2
          # 4
 
+   .. method:: register_table_function(klass, name)
+
+      :param TableFunction klass: class implementing TableFunction API.
+      :param str name: name for user-defined table function.
+
+      Register a ``cysqlite.TableFunction`` class with the connection. Table
+      functions are user-defined functions that, rather than returning a
+      single, scalar value, can return any number of rows of tabular data.
+
+      .. seealso::
+         * :meth:`CySqliteDatabase.table_function` for example implementation.
+         * `cysqlite docs <https://cysqlite.readthedocs.io/en/latest/api.html#tablefunction>`__
+           for details on ``TableFunction`` API.
+
    .. method:: unregister_table_function(name)
 
       :param name: Name of the user-defined table function.
       :returns: True or False, depending on whether the function was removed.
 
-      Unregister the user-defined scalar function.
+      Unregister the user-defined table function.
 
    .. method:: on_commit(fn)
 
@@ -717,6 +733,8 @@ Usage:
 APSW
 ----
 
+.. module:: playhouse.apsw_ext
+
 `APSW <https://rogerbinns.github.io/apsw/>`__ is a thin C wrapper over
 SQLite's C API that exposes nearly every SQLite feature including virtual
 tables, virtual filesystems, and BLOB I/O.
@@ -769,6 +787,8 @@ Usage:
 
 SQLCipher
 ---------
+
+.. module:: playhouse.sqlcipher_ext
 
 `SQLCipher <https://www.zetetic.net/sqlcipher/>`__ is an encrypted wrapper
 around SQLite. Peers exposes it through :class:`SqlCipherDatabase`, which
@@ -848,6 +868,8 @@ Pragma configuration (e.g. increasing PBKDF2 iterations):
 
 SqliteQueueDatabase
 -------------------
+
+.. module:: playhouse.sqliteq
 
 :class:`SqliteQueueDatabase` serializes all write queries through a
 single long-lived connection on a dedicated background thread. This allows
@@ -938,13 +960,15 @@ would with any other database. Only writes are funneled through the queue.
 SQLite-Specific Fields
 ----------------------
 
+.. module:: playhouse.sqlite_ext
+
 These field classes live in ``playhouse.sqlite_ext`` and can be used with:
 
 * :class:`SqliteDatabase`
-* :class:`CySqliteDatabase`
-* :class:`APSWDatabase`
-* :class:`SqlCipherDatabase`
-* :class:`SqliteQueueDatabase`
+* :class:`.CySqliteDatabase`
+* :class:`.APSWDatabase`
+* :class:`.SqlCipherDatabase`
+* :class:`.SqliteQueueDatabase`
 
 .. class:: RowIDField()
 
@@ -996,8 +1020,8 @@ These field classes live in ``playhouse.sqlite_ext`` and can be used with:
 SQLite JSON
 -----------
 
-:class:`JSONField` enables storing and querying JSON data in SQLite using
-the `SQLite json functions <https://sqlite.org/json1.html>`_.
+:class:`~playhouse.sqlite_ext.JSONField` enables storing and querying JSON data
+in SQLite using the `SQLite json functions <https://sqlite.org/json1.html>`_.
 
 .. class:: JSONField(json_dumps=None, json_loads=None, **kwargs)
 
@@ -1413,6 +1437,11 @@ the `SQLite json functions <https://sqlite.org/json1.html>`_.
       # Use .json() to get a Python object:
       kv = KV.select(KV.value.json()).get()
       kv.value   # {'k1': 'v1'}
+
+   .. method:: json()
+
+      Indicate the JSONB field-data should be deserialized and returned as
+      JSON (as opposed to the SQLite binary format).
 
 
 .. _sqlite-fts:
@@ -2193,6 +2222,8 @@ has more information.
 
 User-Defined Function Collection
 ---------------------------------
+
+.. module:: playhouse.sqlite_udf
 
 The ``playhouse.sqlite_udf`` contains a number of functions, aggregates, and
 table-valued functions grouped into named collections.

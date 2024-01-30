@@ -16,6 +16,8 @@ URLs, schema migrations, introspection, code generation, and testing.
 Database URLs
 -------------
 
+.. module:: playhouse.db_url
+
 The ``playhouse.db_url`` module lets you configure Peers from a connection
 string, which is common in twelve-factor applications where database
 credentials live in environment variables.
@@ -44,7 +46,7 @@ Common schemes:
 +------------------------+------------------------------------------+
 | ``postgres://``        | :class:`PostgresqlDatabase`              |
 +------------------------+------------------------------------------+
-| ``postgresext://``     | :class:`PostgresqlExtDatabase`           |
+| ``postgresext://``     | :class:`.PostgresqlExtDatabase`          |
 +------------------------+------------------------------------------+
 | ``mysql://``           | :class:`MySQLDatabase`                   |
 +------------------------+------------------------------------------+
@@ -54,13 +56,13 @@ Connection pool implementations:
 +-----------------------------+------------------------------------------+
 | Scheme                      | Database class                           |
 +=============================+==========================================+
-| ``sqlite+pool:///path``     | :class:`PooledSqliteDatabase`            |
+| ``sqlite+pool:///path``     | :class:`.PooledSqliteDatabase`           |
 +-----------------------------+------------------------------------------+
-| ``postgres+pool://``        | :class:`PooledPostgresqlDatabase`        |
+| ``postgres+pool://``        | :class:`.PooledPostgresqlDatabase`       |
 +-----------------------------+------------------------------------------+
-| ``postgresext+pool://``     | :class:`PooledPostgresqlExtDatabase`     |
+| ``postgresext+pool://``     | :class:`.PooledPostgresqlExtDatabase`    |
 +-----------------------------+------------------------------------------+
-| ``mysql+pool://``           | :class:`PooledMySQLDatabase`             |
+| ``mysql+pool://``           | :class:`.PooledMySQLDatabase`            |
 +-----------------------------+------------------------------------------+
 
 Alternate drivers:
@@ -68,27 +70,27 @@ Alternate drivers:
 +------------------------------+------------------------------------------+
 | Scheme                       | Database class                           |
 +==============================+==========================================+
-| ``psycopg3://``              | :class:`Psycopg3Database`                |
+| ``psycopg3://``              | :class:`.Psycopg3Database`               |
 +------------------------------+------------------------------------------+
-| ``psycopg3+pool://``         | :class:`PooledPsycopg3Database`          |
+| ``psycopg3+pool://``         | :class:`.PooledPsycopg3Database`         |
 +------------------------------+------------------------------------------+
-| ``cockroachdb://``           | :class:`CockroachDatabase`               |
+| ``cockroachdb://``           | :class:`.CockroachDatabase`              |
 +------------------------------+------------------------------------------+
-| ``cockroachdb+pool://``      | :class:`PooledCockroachDatabase`         |
+| ``cockroachdb+pool://``      | :class:`.PooledCockroachDatabase`        |
 +------------------------------+------------------------------------------+
-| ``cysqlite://``              | :class:`CySqliteDatabase`                |
+| ``cysqlite://``              | :class:`.CySqliteDatabase`               |
 +------------------------------+------------------------------------------+
-| ``cysqlite+pool://``         | :class:`PooledCySqliteDatabase`          |
+| ``cysqlite+pool://``         | :class:`.PooledCySqliteDatabase`         |
 +------------------------------+------------------------------------------+
-| ``apsw://``                  | :class:`APSWDatabase`                    |
+| ``apsw://``                  | :class:`.APSWDatabase`                   |
 +------------------------------+------------------------------------------+
-| ``mariadbconnector://``      | :class:`MariaDBConnectorDatabase`        |
+| ``mariadbconnector://``      | :class:`.MariaDBConnectorDatabase`       |
 +------------------------------+------------------------------------------+
-| ``mariadbconnector+pool://`` | :class:`PooledMariaDBConnectorDatabase`  |
+| ``mariadbconnector+pool://`` | :class:`.PooledMariaDBConnectorDatabase` |
 +------------------------------+------------------------------------------+
-| ``mysqlconnector://``        | :class:`MySQLConnectorDatabase`          |
+| ``mysqlconnector://``        | :class:`.MySQLConnectorDatabase`         |
 +------------------------------+------------------------------------------+
-| ``mysqlconnector+pool://``   | :class:`PooledMySQLConnectorDatabase`    |
+| ``mysqlconnector+pool://``   | :class:`.PooledMySQLConnectorDatabase`   |
 +------------------------------+------------------------------------------+
 
 
@@ -144,6 +146,8 @@ Alternate drivers:
 
 Connection Pooling
 ------------------
+
+.. module:: playhouse.pool
 
 The ``playhouse.pool`` module contains a number of :class:`Database` classes
 that provide connection pooling for Postgresql, MySQL and SQLite databases. The
@@ -239,6 +243,8 @@ returns it to the pool rather than actually disconnecting.
 
 Schema Migrations
 -----------------
+
+.. module:: playhouse.migrate
 
 The ``playhouse.migrate`` module provides a lightweight API for making
 incremental schema changes to an existing database without writing raw SQL.
@@ -560,6 +566,8 @@ Migration API
 Reflection
 ----------
 
+.. module:: playhouse.reflection
+
 The ``playhouse.reflection`` module introspects an existing database and
 generates Peers model classes from its schema. It is used internally by
 :ref:`pwiz` and :ref:`dataset`.
@@ -672,6 +680,8 @@ generates Peers model classes from its schema. It is used internally by
 pwiz - Model Generator
 -----------------------
 
+.. module:: pwiz
+
 ``pwiz`` is a command-line tool that introspects a database and prints
 ready-to-use Peers model code. If you have an existing database, running
 ``pwiz`` saves significant time generating the initial model definitions.
@@ -772,6 +782,8 @@ explicit table names.
 
 Test Utilities
 --------------
+
+.. module:: playhouse.test_utils
 
 ``playhouse.test_utils`` provides helpers for testing peers projects.
 

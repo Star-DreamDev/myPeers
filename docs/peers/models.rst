@@ -186,7 +186,12 @@ Field Type              Sqlite              Postgresql          MySQL
 ``ForeignKeyField``     integer             integer             integer
 =====================   =================   =================   =================
 
-.. seealso:: :ref:`custom-fields`
+.. seealso::
+   * SQLite fields for JSON, Full-Text Search: :ref:`sqlite`
+   * Postgresql fields for Arrays, JSON, Full-Text Search, HStore: :ref:`postgresql`
+   * MySQL fields for JSON: :ref:`mysql`
+   * Extra fields (extension): :ref:`extra-fields`
+   * :ref:`custom-fields`
 
 Common field parameters
 ^^^^^^^^^^^^^^^^^^^^^^^

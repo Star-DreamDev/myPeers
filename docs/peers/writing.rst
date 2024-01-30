@@ -126,7 +126,7 @@ The above is slow:
 
 1. **Does not wrap the loop in a transaction.** Result is each
    :meth:`~Model.create` happens in its own :ref:`transaction <transactions>`.
-2. **Python interpreter** is getting in the way, and each :class:`InsertQuery`
+2. **Python interpreter** is getting in the way, and each :class:`Insert`
    must be generated and parsed into SQL.
 3. **Large amount of data** (in terms of raw bytes of SQL) may be sent to the
    database to parse.
@@ -610,7 +610,7 @@ with ``'billing'`` in their username:
 .. seealso::
    * :meth:`Model.delete_instance`
    * :meth:`Model.delete`
-   * :class:`DeleteQuery`
+   * :class:`Delete`
 
 .. _returning-clause:
 

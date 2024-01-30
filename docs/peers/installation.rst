@@ -58,23 +58,25 @@ following drivers are supported out of the box:
 +-----------------------+------------------------+--------------------------------------------+
 | **MySQL**             | ``pymysql``            | :class:`MySQLDatabase`                     |
 +-----------------------+------------------------+--------------------------------------------+
-| Sqlite (async)        | ``aiosqlite``          | :class:`AsyncSqliteDatabase`               |
+| Sqlite (async)        | ``aiosqlite``          | :class:`.AsyncSqliteDatabase`              |
 +-----------------------+------------------------+--------------------------------------------+
-| Postgres (async)      | ``asyncpg``            | :class:`AsyncPostgresqlDatabase`           |
+| Postgres (async)      | ``asyncpg``            | :class:`.AsyncPostgresqlDatabase`          |
 +-----------------------+------------------------+--------------------------------------------+
-| MySQL (async)         | ``aiomysql``           | :class:`AsyncMySQLDatabase`                |
+| MySQL (async)         | ``aiomysql``           | :class:`.AsyncMySQLDatabase`               |
 +-----------------------+------------------------+--------------------------------------------+
-| Sqlite (alternate)    | ``cysqlite``           | :class:`CySqliteDatabase`                  |
+| Sqlite (alternate)    | ``cysqlite``           | :class:`.CySqliteDatabase`                 |
 +-----------------------+------------------------+--------------------------------------------+
-| Sqlite (alternate)    | ``apsw``               | :class:`APSWDatabase`                      |
+| Sqlite (alternate)    | ``apsw``               | :class:`.APSWDatabase`                     |
 +-----------------------+------------------------+--------------------------------------------+
-| SqlCipher             | ``sqlcipher3``         | :class:`SqlCipherDatabase`                 |
+| SqlCipher             | ``sqlcipher3``         | :class:`.SqlCipherDatabase`                |
 +-----------------------+------------------------+--------------------------------------------+
-| MySQL (alternate)     | ``mysql-connector``    | :class:`MySQLConnectorDatabase`            |
+| MySQL (alternate)     | ``mysql-connector``    | :class:`.MySQLConnectorDatabase`           |
 +-----------------------+------------------------+--------------------------------------------+
-| MariaDB (alternate)   | ``mariadb-connector``  | :class:`MariaDBConnectorDatabase`          |
+| MariaDB (alternate)   | ``mariadb-connector``  | :class:`.MariaDBConnectorDatabase`         |
 +-----------------------+------------------------+--------------------------------------------+
-| CockroachDB           | ``psycopg`` (2 or 3)   | :class:`CockroachDatabase`                 |
+| CockroachDB           | ``psycopg`` (2 or 3)   | :class:`.CockroachDatabase`                |
++-----------------------+------------------------+--------------------------------------------+
+| Postgres (extensions) | ``psycopg`` (2 or 3)   | :class:`.PostgresqlExtDatabase`            |
 +-----------------------+------------------------+--------------------------------------------+
 
 The three bolded rows cover the majority of deployments. All others are

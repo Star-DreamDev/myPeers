@@ -3,6 +3,8 @@
 MySQL and MariaDB
 =================
 
+.. module:: playhouse.mysql_ext
+
 Peers provides alternate drivers for MySQL through ``playhouse.mysql_ext``.
 
 .. class:: MySQLConnectorDatabase(database, **kwargs)
@@ -47,7 +49,6 @@ MySQL-specific helpers:
 .. module:: playhouse.mysql_ext:
 
 .. class:: JSONField()
-   :noindex:
 
    Extends :class:`TextField` with transparent JSON encoding/decoding.
 
@@ -57,7 +58,6 @@ MySQL-specific helpers:
       (e.g. ``'$.key'``).
 
 .. function:: Match(columns, expr, modifier=None)
-   :noindex:
 
    Helper for MySQL full-text search using ``MATCH ... AGAINST`` syntax.
 
