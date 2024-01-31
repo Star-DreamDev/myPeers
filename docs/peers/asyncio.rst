@@ -17,11 +17,10 @@ they yield during I/O.
 This means existing Peers code - queries, transactions, ORM methods - runs
 unchanged inside async contexts. No query-by-query API changes are required.
 
-.. note::
-   For applications that use Peers with a purely synchronous framework
-   (Flask, Django, Bottle, etc.), no async setup is needed. See
-   :ref:`framework-integration` for examples of using Peers with various sync
-   and async frameworks.
+For applications that use Peers with a purely synchronous framework
+(Flask, Django, Bottle, etc.), no async setup is needed. See
+:ref:`framework-integration` for examples of using Peers with various sync
+and async frameworks.
 
 Installation
 ------------
