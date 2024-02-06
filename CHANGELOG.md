@@ -7,6 +7,8 @@ https://github.com/Star-DreamDev/peers/releases
 
 ## master
 
+* Remove all Python 2.x compatibility code.
+
 [View commits](https://github.com/Star-DreamDev/peers/compare/4.0.1...master)
 
 ## 4.0.1
