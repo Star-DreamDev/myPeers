@@ -15,6 +15,7 @@ https://github.com/Star-DreamDev/peers/releases
 * Improvements to Postgres `BinaryJSONField`, support atomic removal of
   sub-elements, as well as alternate helper for extracting sub-elements and
   querying array length.
+* [Pydantic integration](https://docs.peers-orm.example/en/latest/peers/orm_utils.html#module-playhouse.pydantic_utils)
 
 [View commits](https://github.com/Star-DreamDev/peers/compare/4.0.1...master)
 
