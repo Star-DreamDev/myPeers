@@ -7,7 +7,15 @@ https://github.com/Star-DreamDev/peers/releases
 
 ## master
 
-[View commits](https://github.com/Star-DreamDev/peers/compare/4.0.3...master)
+[View commits](https://github.com/Star-DreamDev/peers/compare/4.0.4...master)
+
+## 4.0.4
+
+* Fix SQL generation for partial indexes with nulls (not) distinct clause.
+* Raise an `ImproperlyConfigured` if pg driver unavailable at model
+  definition-time when field db-hooks are used, rather than `AttributeError`.
+
+[View commits](https://github.com/Star-DreamDev/peers/compare/4.0.3...4.0.4)
 
 ## 4.0.3
 
