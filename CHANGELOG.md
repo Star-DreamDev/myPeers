@@ -21,6 +21,7 @@ https://github.com/Star-DreamDev/peers/releases
 * Better handling of duplicated column names in cursor wrapper implementations.
 * Improve performance of ModelCursorWrapper when reconstructing model instance
   graphs after multi-table selects.
+* If only psycopg3 is installed, use it by default (#3036)
 
 [View commits](https://github.com/Star-DreamDev/peers/compare/4.0.2...master)
 
