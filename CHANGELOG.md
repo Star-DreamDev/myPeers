@@ -14,6 +14,7 @@ https://github.com/Star-DreamDev/peers/releases
 * Quote path elements in SQLite's JSON field.
 * Better and faster parsing of formatted date/times. Use the stdlib
   `fromisoformat` as a first attempt since it's faster and more robust.
+* Ensure `db.connection_context()` can be nested cleanly, #3046
 
 [View commits](https://github.com/Star-DreamDev/peers/compare/4.0.5...master)
 
