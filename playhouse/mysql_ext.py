@@ -11,6 +11,7 @@ except ImportError:
 
 from peers import ImproperlyConfigured
 from peers import Insert
+from peers import JSONField
 from peers import MySQLDatabase
 from peers import Node
 from peers import NodeList
@@ -87,31 +88,6 @@ class MariaDBConnectorDatabase(MySQLDatabase):
 class PooledMariaDBConnectorDatabase(_PooledMySQLDatabase,
                                      MariaDBConnectorDatabase):
     pass
-
-
-class JSONField(TextField):
-    field_type = 'JSON'
-
-    def __init__(self, json_dumps=None, json_loads=None, **kwargs):
-        self._json_dumps = json_dumps or json.dumps
-        self._json_loads = json_loads or json.loads
-        super(JSONField, self).__init__(**kwargs)
-
-    def python_value(self, value):
-        if value is not None:
-            try:
-                return self._json_loads(value)
-            except (TypeError, ValueError):
-                return value
-
-    def db_value(self, value):
-        if value is not None:
-            if not isinstance(value, Node):
-                value = self._json_dumps(value)
-            return value
-
-    def extract(self, path):
-        return fn.json_extract(self, path)
 
 
 def Match(columns, expr, modifier=None):

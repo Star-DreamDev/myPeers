@@ -58,7 +58,6 @@ Contents:
    peers/sqlite
    peers/postgres
    peers/mysql
-   peers/json_field
    peers/db_tools
    peers/orm_utils
    peers/recipes
