@@ -13,6 +13,13 @@ jobs:
           MYSQL_DATABASE: peers_test
         ports:
           - 3306:3306
+      mysql8:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: peers
+          MYSQL_DATABASE: peers_test
+        ports:
+          - 3307:3306
       postgres:
         image: postgres
         env:
@@ -44,6 +51,8 @@ jobs:
             peers-backend: cysqlite
           - python-version: "3.13"
             peers-backend: cockroachdb
+          - python-version: "3.13"
+            peers-backend: mysql8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -73,6 +82,7 @@ jobs:
       - name: runtests ${{ matrix.peers-backend }} - ${{ matrix.python-version }}
         env:
           PEERS_TEST_BACKEND: ${{ matrix.peers-backend }}
+          PEERS_MYSQL_PORT: ${{ matrix.peers-backend == 'mysql8' && '3307' || '3306' }}
           PGUSER: postgres
           PGHOST: 127.0.0.1
           PGPASSWORD: peers
