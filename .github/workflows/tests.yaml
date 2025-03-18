@@ -88,3 +88,10 @@ jobs:
           PGPASSWORD: peers
           CI: 1
         run: python runtests.py --mysql-user=root --mysql-password=peers -s -v2
+      - name: asyncio stress
+        if: matrix.peers-backend == 'postgresql' && matrix.python-version == '3.13'
+        env:
+          PGUSER: postgres
+          PGHOST: 127.0.0.1
+          PGPASSWORD: peers
+        run: python runtests.py -A
