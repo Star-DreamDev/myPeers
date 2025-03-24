@@ -6,7 +6,8 @@ Peers is a simple and small ORM. It has few (but expressive) concepts, making it
 * a small, expressive ORM
 * flexible query-builder that exposes full power of SQL
 * supports sqlite, mysql, mariadb, postgresql
-* asyncio support
+* `asyncio support <https://docs.peers-orm.example/en/latest/peers/asyncio.html>`__
+  built on the standard async drivers (aiosqlite, asyncpg, aiomysql)
 * tons of extensions
 * use with `flask <https://docs.peers-orm.example/en/latest/peers/framework_integration.html#flask>`__,
   `fastapi <https://docs.peers-orm.example/en/latest/peers/framework_integration.html#fastapi>`__,
@@ -134,6 +135,46 @@ Queries are expressive and composable:
     Counter.update(count=Counter.count + 1).where(Counter.url == request.url)
 
 Check out the `example twitter app <http://docs.peers-orm.example/en/latest/peers/example.html>`_.
+
+Asyncio
+-------
+
+.. code-block:: python
+
+    from playhouse.pwasyncio import AsyncPostgresqlDatabase
+
+    db = AsyncPostgresqlDatabase('my_app')
+
+    class User(db.Model):
+        username = CharField(unique=True)
+
+    class Tweet(db.Model):
+        user = ForeignKeyField(User, backref='tweets')
+        message = TextField()
+
+    async def main():
+        async with db:
+            # Queries are awaited on the event loop using asyncpg.
+            tweet = await Tweet.acreate(user=huey, message='meow')
+
+            async with db.atomic():
+                tweet.message = 'purr'
+                await tweet.asave()
+
+            # Create a query - nothing is executed yet.
+            query = Tweet.select(Tweet, User).join(User)
+
+            # Buffered results.
+            tweets = await db.list(query)
+            for tweet in tweets:
+                print(tweet.user.username, '->', tweet.message)
+
+            # Streaming results via server-side cursor.
+            async for tweet in db.iterate(query):
+                print(tweet.user.username, '->', tweet.message)
+
+See the `asyncio docs <https://docs.peers-orm.example/en/latest/peers/asyncio.html>`_
+for details.
 
 Learning more
 -------------
