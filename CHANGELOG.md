@@ -7,6 +7,10 @@ https://github.com/Star-DreamDev/peers/releases
 
 ## master
 
+[View commits](https://github.com/Star-DreamDev/peers/compare/4.0.8...master)
+
+## 4.0.8
+
 * Add `BaseQuery.aexecute()` - an async twin of `execute()` available on all
   query types, executing through the query's bound async database:
   `await User.select().aexecute()`, `await user.tweets.aexecute()`. Returns
@@ -33,7 +37,7 @@ https://github.com/Star-DreamDev/peers/releases
   APIs documented in [the docs](https://docs.peers-orm.example/en/latest/peers/asyncio.html)
   are stable. The asyncio stress test now also runs in CI.
 
-[View commits](https://github.com/Star-DreamDev/peers/compare/4.0.7...master)
+[View commits](https://github.com/Star-DreamDev/peers/compare/4.0.7...4.0.8)
 
 ## 4.0.7
 
