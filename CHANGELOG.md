@@ -7,6 +7,8 @@ https://github.com/Star-DreamDev/peers/releases
 
 ## master
 
+* Ensure new JSONField can be inherited, #3052
+
 [View commits](https://github.com/Star-DreamDev/peers/compare/4.0.8...master)
 
 ## 4.0.8
