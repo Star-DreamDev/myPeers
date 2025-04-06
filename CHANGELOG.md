@@ -7,6 +7,9 @@ https://github.com/Star-DreamDev/peers/releases
 
 ## master
 
+* Add `MySQLJSONField` (`playhouse.mysql_ext`) with `contains_any()` for the
+  `JSON_OVERLAPS`/"match any" counterpart to `contains` for JSON arrays.
+
 [View commits](https://github.com/Star-DreamDev/peers/compare/4.1.0...master)
 
 ## 4.1.0
