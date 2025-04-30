@@ -9,6 +9,11 @@ https://github.com/Star-DreamDev/peers/releases
 
 * Add `MySQLJSONField` (`playhouse.mysql_ext`) with `contains_any()` for the
   `JSON_OVERLAPS`/"match any" counterpart to `contains` for JSON arrays.
+* New declarative API for pre-fetching related instance (`Load()`). See
+  [documentation](https://docs.peers-orm.example/en/latest/peers/relationships.html#avoiding-n-1-with-eager-loading).
+  This replaces `prefetch()`, is more flexible and also supports options for
+  applying a row limit to sub-results, and an option to materialize the ID
+  list.
 
 [View commits](https://github.com/Star-DreamDev/peers/compare/4.1.0...master)
 
