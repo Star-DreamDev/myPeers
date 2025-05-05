@@ -1,0 +1,38 @@
+# Stubtest doesn't recognize __ as indicating positional-only arg at runtime
+# https://github.com/python/mypy/issues/15302
+peers.Model.insert
+peers.Model.replace
+peers.Model.update
+
+# Wrapped with @Node.copy which changes the signature to "def (self, *args, **kwargs)"
+peers.DQ.__invert__
+peers.Window.as_groups
+peers.Window.as_range
+peers.Window.as_rows
+peers._ModelQueryHelper.models
+
+# Wrapped with @database_required which sometimes injects the database argument
+peers.BaseQuery.execute
+peers.CompoundSelectQuery.exists
+peers.SelectBase.count
+peers.SelectBase.exists
+peers.SelectBase.first
+peers.SelectBase.get
+peers.SelectBase.peek
+peers.SelectBase.scalar
+peers.SelectBase.scalars
+
+# Descriptor methods exist on FieldAccessor at runtime, but are declared on the
+# generic Field classes in the stub so that `instance.field` resolves to the
+# field's Python value and `Model.field` resolves to the field (for queries).
+peers.Field.__get__
+peers.Field.__set__
+# BigBitField overrides __get__ to yield a BigBitFieldData wrapper, not bytes.
+peers.BigBitField.__get__
+peers.Field.__init__
+# These fields take named constructor args, carried by their __new__ overloads.
+peers.CharField.__init__
+peers.ForeignKeyField.__init__
+peers.DecimalField.__init__
+peers.IdentityField.__init__
+
