@@ -16,6 +16,7 @@ https://github.com/Star-DreamDev/peers/releases
   `JSON_OVERLAPS`/"match any" counterpart to `contains` for JSON arrays.
 * Do not traverse foreign-key fields where `lazy_load=False` when serializing
   recursively with `model_to_dict()`, #3055.
+* Add vendored typeshed stub with improvements.
 
 [View commits](https://github.com/Star-DreamDev/peers/compare/4.1.0...master)
 
