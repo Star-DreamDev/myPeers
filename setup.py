@@ -33,6 +33,7 @@ else:
 
 setup(
     name='peers',
-    packages=['playhouse'],
+    packages=['playhouse', 'peers-stubs'],
     py_modules=['peers', 'pwiz'],
+    package_data={'peers-stubs': ['*.pyi']},
     ext_modules=ext_modules)
