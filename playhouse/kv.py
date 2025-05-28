@@ -1,7 +1,6 @@
 import operator
 
 from peers import *
-from peers import sqlite3
 from peers import Expression
 from playhouse.fields import PickleField
 try:

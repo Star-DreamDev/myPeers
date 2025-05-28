@@ -25,7 +25,6 @@ from peers import DateTimeField as _DateTimeField
 from peers import DecimalField as _DecimalField
 from peers import Insert
 from peers import TimeField as _TimeField
-from peers import logger
 
 
 class APSWDatabase(SqliteDatabase):
@@ -65,7 +64,7 @@ class APSWDatabase(SqliteDatabase):
 
     def _load_aggregates(self, conn):
         for name, (klass, num_params) in self._aggregates.items():
-            def make_aggregate():
+            def make_aggregate(klass=klass):
                 return (klass(), klass.step, klass.finalize)
             conn.createaggregatefunction(name, make_aggregate)
 

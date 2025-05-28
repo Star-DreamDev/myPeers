@@ -1,23 +1,17 @@
 import json
 import re
-import sys
-import warnings
 
 from peers import *
 from peers import ColumnBase
 from peers import EnclosedNodeList
 from peers import Entity
 from peers import Expression
-from peers import Insert
 from peers import Node
 from peers import NodeList
 from peers import OP
 from peers import VirtualField
 from peers import merge_dict
 from peers import sqlite3
-from playhouse.sqlite_udf import JSON
-from playhouse.sqlite_udf import RANK
-from playhouse.sqlite_udf import register_udf_groups
 
 
 
@@ -383,7 +377,6 @@ class BaseFTSModel(VirtualModel):
         content = options.get('content')
         prefix = options.get('prefix')
         tokenize = options.get('tokenize')
-        content_rowid = options.get('content_rowid')
 
         if isinstance(content, str) and content == '':
             # Special-case content-less full-text search tables.
@@ -392,9 +385,6 @@ class BaseFTSModel(VirtualModel):
             # Special-case to ensure fields are fully-qualified.
             options['content'] = Entity(content.model._meta.table_name,
                                         content.column_name)
-
-        if content_rowid is not None:
-            options['content_rowid'] = content_rowid
 
         if prefix:
             if isinstance(prefix, (list, tuple)):

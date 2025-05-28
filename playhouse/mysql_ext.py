@@ -12,6 +12,7 @@ except ImportError:
 from peers import Expression
 from peers import ImproperlyConfigured
 from peers import Insert
+from peers import InterfaceError
 from peers import JSONField
 from peers import JSONPath
 from peers import MySQLDatabase
@@ -83,7 +84,7 @@ class MariaDBConnectorDatabase(MySQLDatabase):
         elif query_type == Insert.SIMPLE:
             try:
                 return cursor[0][0]
-            except (AttributeError, IndexError):
+            except (AttributeError, IndexError, TypeError):
                 return cursor.lastrowid
         return cursor
 

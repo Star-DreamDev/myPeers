@@ -8,11 +8,9 @@ from typing import get_origin
 from peers import AutoField
 from peers import BackrefAccessor
 from peers import ForeignKeyField
-from peers import Model
 from peers import Node
 from playhouse.reflection import FieldTypeMap
 
-from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import create_model

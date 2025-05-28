@@ -11,7 +11,7 @@ from peers import *
 from peers import _atomic, _savepoint, _transaction
 from peers import _callable_context_manager
 from peers import __exception_wrapper__
-from peers import Node
+from peers import logger as peers_logger
 from peers import Psycopg3Adapter
 from playhouse.postgres_ext import Json
 
@@ -215,6 +215,7 @@ class AsyncDatabaseMixin(object):
             raise MissingGreenletBridge(errmsg + _BRIDGE_ERR_HINT) from exc
 
     async def aexecute_sql(self, sql, params=None):
+        peers_logger.debug((sql, params))
         conn = await self.aconnect()
         with __exception_wrapper__:
             return await conn.execute(sql, params)
@@ -883,7 +884,7 @@ class AsyncMySQLDatabase(AsyncDatabaseMixin, MySQLDatabase):
             self._pool.acquire(),
             timeout=self._acquire_timeout)
         if self.server_version is None:
-            # Distinguishes MySQL from MariaDB, e.g. for JSONField SQL.
+            # Used for version-dependent SQL, e.g. MariaDB upsert VALUE().
             self.server_version = self._extract_server_version(
                 conn.get_server_info())
         return AsyncMySQLConnection(conn)
