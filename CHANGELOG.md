@@ -7,9 +7,12 @@ https://github.com/Star-DreamDev/peers/releases
 
 ## master
 
+* Add django-style filter lookups: `contains`, `startswith`, `endswith`,
+  `between`, `is_null`, `not_in` and `iregexp`.
+
 [View commits](https://github.com/Star-DreamDev/peers/compare/4.1.2...master)
 
-## 4.1.1
+## 4.1.2
 
 * Ensure quotes escaped in SQLite introspection methods, thanks @greymoth-jp
   for reporting and the initial patch.
