@@ -131,6 +131,7 @@ if __name__ == '__main__':
 
     files_to_delete = [
         'peers_test.db',
+        'peers_test.db-shm',
         'peers_test',
         'tmp.db',
         'peers_test.bdb.db',
