@@ -7,6 +7,10 @@ https://github.com/Star-DreamDev/peers/releases
 
 ## master
 
+[View commits](https://github.com/Star-DreamDev/peers/compare/4.2.2...master)
+
+## 4.2.2
+
 * Change `Field.__hash__` again... fml. Use `(model_cls, field name)`.
 * Fix `Metadata.remove_ref()` removing the wrong foreign-key when a model
   has multiple foreign-keys to the same target, as `list.remove()` matched
@@ -36,7 +40,7 @@ https://github.com/Star-DreamDev/peers/releases
   which backfills them. A model with no python defaults still uses `DEFAULT
   VALUES`.
 
-[View commits](https://github.com/Star-DreamDev/peers/compare/4.2.1...master)
+[View commits](https://github.com/Star-DreamDev/peers/compare/4.2.1...4.2.2)
 
 ## 4.2.1
 
