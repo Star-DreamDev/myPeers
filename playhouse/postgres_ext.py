@@ -1,6 +1,5 @@
 import json
 import logging
-import uuid
 
 from peers import *
 from peers import ColumnBase
