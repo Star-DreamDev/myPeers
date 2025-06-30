@@ -7,6 +7,8 @@ https://github.com/Star-DreamDev/peers/releases
 
 ## master
 
+* Fix anonymous sub-select keeping a stale `id()`-based hash after `clone()`.
+
 [View commits](https://github.com/Star-DreamDev/peers/compare/4.2.4...master)
 
 ## 4.2.4
