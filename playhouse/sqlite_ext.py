@@ -14,7 +14,6 @@ from peers import merge_dict
 from peers import sqlite3
 
 
-
 FTS3_MATCHINFO = 'pcx'
 FTS4_MATCHINFO = 'pcnalx'
 FTS_VERSION = 4

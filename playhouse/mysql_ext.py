@@ -1,5 +1,3 @@
-import json
-
 try:
     import mysql.connector as mysql_connector
 except ImportError:
@@ -16,11 +14,9 @@ from peers import InterfaceError
 from peers import JSONField
 from peers import JSONPath
 from peers import MySQLDatabase
-from peers import Node
 from peers import NodeList
 from peers import OP
 from peers import SQL
-from peers import TextField
 from peers import Value
 from peers import fn
 from playhouse.pool import _PooledMySQLDatabase
