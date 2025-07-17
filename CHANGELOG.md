@@ -7,6 +7,9 @@ https://github.com/Star-DreamDev/peers/releases
 
 ## master
 
+* Lateral joins honor a user-supplied `on=` predicate instead of silently
+  replacing it with `true`.
+
 [View commits](https://github.com/Star-DreamDev/peers/compare/4.2.6...master)
 
 ## 4.2.6
