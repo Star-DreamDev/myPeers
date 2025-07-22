@@ -11,6 +11,7 @@ from peers import NodeList
 from peers import OP
 from peers import merge_dict
 from peers import sqlite3
+from playhouse import fts_parser as _fts_parser
 
 
 FTS3_MATCHINFO = 'pcx'
@@ -698,6 +699,16 @@ class FTS5Model(BaseFTSModel):
         if any_invalid:
             return ' '.join(accum)
         return query
+
+    @classmethod
+    def web_query(cls, query):
+        """
+        Translate a search-box query (quoted phrases, AND/OR/NOT, -exclusion,
+        column:filters, parentheses) into an FTS5 query.
+        """
+        columns = [f.column_name for f in cls._meta.sorted_fields
+                   if isinstance(f, SearchField) and not f.unindexed]
+        return _fts_parser.parse(query, columns)
 
     @classmethod
     def match(cls, term):
