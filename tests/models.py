@@ -2136,6 +2136,66 @@ class TestFunctionCoerce(ModelTestCase):
         query = Sample.select(fn.AVG(Sample.counter).alias('a'))
         self.assertEqual(query.get().a, 1.5)
 
+    @skip_if(sys.version_info < (3, 11, 0), 'requires 3.11')
+    @requires_models(Post)
+    def test_function_coerce(self):
+        for i in range(3):
+            for j in range(i + 1):
+                Post.create(
+                    content='p',
+                    timestamp=datetime.datetime(2026, 1, j + 1))
+
+        @self.database.func()
+        def ymd(s):
+            return datetime.datetime.fromisoformat(s).strftime('%Y%m%d')
+
+        def assertResults(agg, expected):
+            q = (Post
+                 .select(agg, fn.COUNT(Post.id))
+                 .group_by(agg)
+                 .order_by(SQL('1')))
+            self.assertEqual(list(q.tuples()), expected)
+
+        exp = fn.ymd(Post.timestamp)
+
+        convert = [
+            exp,
+            exp.alias('xyz'),
+            exp.alias('xyz').coerce(True),
+            exp.bind_to(Post).alias('xyz'),
+            exp.cast('text').coerce(True),
+            exp.cast('text').alias('timestamp').coerce(True),
+            exp.python_value(Post.timestamp.python_value),
+            fn.upper(Post.timestamp),
+
+            # I don't want to screw up people doing stuff like fn.json_extract
+            # on a field casted to json (e.g.), so this will run through the
+            # converter:
+            fn.upper(Post.timestamp.cast('text')),
+        ]
+        for e in convert:
+            assertResults(e, [
+                (datetime.datetime(2026, 1, 1), 3),
+                (datetime.datetime(2026, 1, 2), 2),
+                (datetime.datetime(2026, 1, 3), 1)])
+
+        no_convert = [
+            exp.coerce(False),
+            exp.cast('text'),
+            exp.cast('text').alias('xyz'),
+            exp.cast('text').alias('timestamp'),
+            exp.alias('xyz').coerce(False),
+            exp.cast('text').alias('xyz').coerce(False),
+            exp.python_value(Post.timestamp.python_value).cast('text'),
+            fn.upper(exp),
+            fn.upper(exp.cast('text')),
+        ]
+        for e in no_convert:
+            assertResults(e, [
+                ('20260101', 3),
+                ('20260102', 2),
+                ('20260103', 1)])
+
 
 class T1(TestModel):
     pk = AutoField()
@@ -7955,67 +8015,3 @@ class TestAnalyticalQueries(ModelTestCase):
             (datetime.date(2026, 3, 1), 152, 352, -48),
             (datetime.date(2026, 4, 1), 1021, 1373, 869),
         ])
-
-
-@skip_if(sys.version_info < (3, 11, 0), 'requires 3.11')
-class TestFunctionCoerce(ModelTestCase):
-    database = get_in_memory_db()
-    requires = [Post]
-
-    def test_function_coerce(self):
-        for i in range(3):
-            for j in range(i + 1):
-                Post.create(
-                    content='p',
-                    timestamp=datetime.datetime(2026, 1, j + 1))
-
-        @self.database.func()
-        def ymd(s):
-            return datetime.datetime.fromisoformat(s).strftime('%Y%m%d')
-
-        def assertResults(agg, expected):
-            q = (Post
-                 .select(agg, fn.COUNT(Post.id))
-                 .group_by(agg)
-                 .order_by(SQL('1')))
-            self.assertEqual(list(q.tuples()), expected)
-
-        exp = fn.ymd(Post.timestamp)
-
-        convert = [
-            exp,
-            exp.alias('xyz'),
-            exp.alias('xyz').coerce(True),
-            exp.bind_to(Post).alias('xyz'),
-            exp.cast('text').coerce(True),
-            exp.cast('text').alias('timestamp').coerce(True),
-            exp.python_value(Post.timestamp.python_value),
-            fn.upper(Post.timestamp),
-
-            # I don't want to screw up people doing stuff like fn.json_extract
-            # on a field casted to json (e.g.), so this will run through the
-            # converter:
-            fn.upper(Post.timestamp.cast('text')),
-        ]
-        for e in convert:
-            assertResults(e, [
-                (datetime.datetime(2026, 1, 1), 3),
-                (datetime.datetime(2026, 1, 2), 2),
-                (datetime.datetime(2026, 1, 3), 1)])
-
-        no_convert = [
-            exp.coerce(False),
-            exp.cast('text'),
-            exp.cast('text').alias('xyz'),
-            exp.cast('text').alias('timestamp'),
-            exp.alias('xyz').coerce(False),
-            exp.cast('text').alias('xyz').coerce(False),
-            exp.python_value(Post.timestamp.python_value).cast('text'),
-            fn.upper(exp),
-            fn.upper(exp.cast('text')),
-        ]
-        for e in no_convert:
-            assertResults(e, [
-                ('20260101', 3),
-                ('20260102', 2),
-                ('20260103', 1)])
