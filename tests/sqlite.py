@@ -8,8 +8,6 @@ from peers import sqlite3
 from playhouse.sqlite_ext import *
 
 from .base import BaseTestCase
-from .base import IS_SQLITE_37
-from .base import IS_SQLITE_9
 from .base import ModelTestCase
 from .base import TestModel
 from .base import get_in_memory_db
