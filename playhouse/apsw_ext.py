@@ -23,7 +23,6 @@ from peers import BooleanField as _BooleanField
 from peers import DateField as _DateField
 from peers import DateTimeField as _DateTimeField
 from peers import DecimalField as _DecimalField
-from peers import Insert
 from peers import TimeField as _TimeField
 
 
@@ -89,15 +88,8 @@ class APSWDatabase(SqliteDatabase):
             conn.enableloadextension(True)
             conn.loadextension(extension)
 
-    def last_insert_id(self, cursor, query_type=None):
-        if not self.returning_clause:
-            return cursor.connection.last_insert_rowid()
-        elif query_type == Insert.SIMPLE:
-            try:
-                return cursor[0][0]
-            except (AttributeError, IndexError, TypeError):
-                pass
-        return cursor
+    def _last_insert_rowid(self, cursor):
+        return cursor.connection.last_insert_rowid()
 
     def rows_affected(self, cursor):
         try:
