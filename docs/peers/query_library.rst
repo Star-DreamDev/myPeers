@@ -30,11 +30,12 @@ to the tables in the diagram.
 
 .. code-block:: python
 
+    import datetime
     from functools import partial
     from peers import *
 
 
-    db = PostgresqlDatabase('peers_test')
+    db = PostgresqlDatabase('peers_clubdata')
 
     class BaseModel(Model):
         class Meta:
@@ -88,15 +89,15 @@ Schema Creation
 If you downloaded the SQL file from the Postgresql Exercises site, then you can
 load the data into a Postgresql database using the following commands::
 
-    createdb peers_test
-    psql -U postgres -f clubdata.sql -d peers_test -x -q
+    createdb peers_clubdata
+    psql -U postgres -f clubdata.sql -d peers_clubdata -x -q
 
 To create the schema using Peers, without loading the sample data, you can run
 the following:
 
 .. code-block:: python
 
-    # Assumes you have created the database "peers_test" already.
+    # Assumes you have created the database "peers_clubdata" already.
     db.create_tables([Member, Facility, Booking])
 
 
