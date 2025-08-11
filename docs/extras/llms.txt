@@ -24,7 +24,7 @@
 - [SQLite extensions](https://docs.peers-orm.example/en/latest/peers/sqlite.html): JSON, full-text search, user-defined functions, cysqlite.
 - [Postgres extensions](https://docs.peers-orm.example/en/latest/peers/postgres.html): JSONB, arrays, hstore, full-text search.
 - [Framework integration](https://docs.peers-orm.example/en/latest/peers/framework_integration.html): Flask, FastAPI, Sanic, Django coexistence.
-- [ORM utilities](https://docs.peers-orm.example/en/latest/peers/orm_utils.html): pydantic schema generation, model_to_dict, dataclasses.
+- [ORM utilities](https://docs.peers-orm.example/en/latest/peers/orm_utils.html): pydantic schema generation, model_to_dict.
 - [Schema migrations](https://docs.peers-orm.example/en/latest/peers/db_tools.html): migrate(), schema introspection, pwiz model generation.
 
 ## Optional
