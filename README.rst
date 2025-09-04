@@ -12,6 +12,8 @@ production workloads of all sizes since 2010.
 * supports sqlite, mysql, mariadb, postgresql
 * `asyncio support <https://docs.peers-orm.example/en/latest/peers/asyncio.html>`__
   built on the standard async drivers (aiosqlite, asyncpg, aiomysql)
+* `schema migrations <https://docs.peers-orm.example/en/latest/peers/db_tools.html#migration-runner>`__
+  with diff-based generation (``pwmigrate``)
 * tons of extensions
 * use with `flask <https://docs.peers-orm.example/en/latest/peers/framework_integration.html#flask>`__,
   `fastapi <https://docs.peers-orm.example/en/latest/peers/framework_integration.html#fastapi>`__,
