@@ -1169,7 +1169,7 @@ Database
        Also accepts string which is converted to the matching constant.
    :type isolation_level: int, str
    :param bool prefer_psycopg3: If both psycopg2 and psycopg3 are installed,
-       instruct Peers to prefer psycopg3.
+       instruct Peers to prefer psycopg3. See :ref:`psycopg2-vs-psycopg3`.
 
    Example:
 
