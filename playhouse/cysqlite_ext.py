@@ -3,6 +3,7 @@ from pathlib import Path
 
 from peers import DecimalField
 from peers import ImproperlyConfigured
+from peers import InterfaceError
 from peers import OP
 from peers import SqliteDatabase
 from peers import __exception_wrapper__
@@ -226,10 +227,16 @@ class CySqliteDatabase(SqliteDatabase):
             self.connection().begin(lock_type)
 
     def commit(self):
+        if self.is_closed():
+            raise InterfaceError('Cannot commit, database connection not '
+                                 'open.')
         with __exception_wrapper__:
             self.connection().commit()
 
     def rollback(self):
+        if self.is_closed():
+            raise InterfaceError('Cannot rollback, database connection not '
+                                 'open.')
         with __exception_wrapper__:
             self.connection().rollback()
 
