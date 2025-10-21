@@ -23,7 +23,7 @@ production workloads of all sizes since 2010.
 * use with :ref:`flask <flask>`, :ref:`fastapi <fastapi>`, :ref:`pydantic <pydantic>`
   and :ref:`more <framework-integration>`
 
-Peers's source code hosted on `GitHub <https://github.com/Star-DreamDev/peers>`_.
+Peers's source code is hosted on `GitHub <https://github.com/Star-DreamDev/peers>`_.
 
 New to peers? These may help:
 
