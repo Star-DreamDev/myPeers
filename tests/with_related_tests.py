@@ -70,9 +70,10 @@ class TestWithRelated(ModelTestCase):
                 ('bark', 4, True))),
             ('zaizee', ()))
         tweets = {}
+        self.users = {}
         with self.database.atomic():
             for username, rows in data:
-                user = User.create(username=username)
+                user = self.users[username] = User.create(username=username)
                 for content, ts, published in rows:
                     tweets[content] = Tweet.create(user=user, content=content,
                                                    timestamp=ts,
@@ -216,7 +217,8 @@ class TestWithRelated(ModelTestCase):
         self.assertHistory(1, [
             ('SELECT "t1"."id", "t1"."user_id", "t1"."content", '
              '"t1"."published", "t1"."timestamp" FROM "tweet" AS "t1" '
-             'WHERE ("t1"."user_id" IN (?, ?, ?))', [1, 2, 3])])
+             'WHERE ("t1"."user_id" IN (?, ?, ?))',
+             [self.users[u].id for u in ('huey', 'mickey', 'zaizee')])])
 
     def test_materialize_forward_fk(self):
         with self.assertQueryCount(2):
@@ -231,7 +233,8 @@ class TestWithRelated(ModelTestCase):
 
         self.assertHistory(1, [
             ('SELECT "t1"."id", "t1"."username" FROM "user" AS "t1" '
-             'WHERE ("t1"."id" IN (?, ?))', [2, 1])])
+             'WHERE ("t1"."id" IN (?, ?))',
+             [self.users['mickey'].id, self.users['huey'].id])])
 
     def test_forward_fk(self):
         for pt in PREFETCH_TYPE.values():
@@ -831,8 +834,8 @@ class TestWithRelatedLimit(ModelTestCase):
 
     def setUp(self):
         super(TestWithRelatedLimit, self).setUp()
-        huey = User.create(username='huey')
-        mickey = User.create(username='mickey')
+        huey = self.huey = User.create(username='huey')
+        mickey = self.mickey = User.create(username='mickey')
         self.tweets = {}
         for i, content in enumerate(['h0', 'h1', 'h2', 'h3']):
             self.tweets[content] = Tweet.create(user=huey, content=content,
@@ -882,7 +885,8 @@ class TestWithRelatedLimit(ModelTestCase):
              'INNER JOIN "_load_ranked_0" '
              'ON ("t2"."id" = "_load_ranked_0"."id") '
              'WHERE ("_load_ranked_0"."_rn" <= ?) '
-             'ORDER BY "_load_ranked_0"."_rn"', [1, 2, 2])])
+             'ORDER BY "_load_ranked_0"."_rn"',
+             [self.huey.id, self.mickey.id, 2])])
 
     def test_per_parent_limit_with_children(self):
         # A child relation hangs off a windowed (CTE) relation: the embedded
@@ -954,7 +958,7 @@ class TestWithRelatedLimit(ModelTestCase):
              'INNER JOIN "_load_ranked_0" '
              'ON ("t3"."id" = "_load_ranked_0"."id") '
              'WHERE ("_load_ranked_0"."_rn" <= ?) '
-             'ORDER BY "_load_ranked_0"."_rn"', [1, 2])])
+             'ORDER BY "_load_ranked_0"."_rn"', [self.huey.id, 2])])
 
     def test_per_parent_limit_fanout_with_children(self):
         # Collapsed windowed parents must still drive a nested child load.

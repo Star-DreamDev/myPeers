@@ -281,20 +281,23 @@ class TestModelToDict(ModelTestCase):
                  .order_by(Gallery.id))
         rows = [model_to_dict(gallery, backrefs=True, manytomany=True)
                 for gallery in query]
+        gid = dict(Gallery.select(Gallery.name, Gallery.id).tuples())
+        oid = dict(Owner.select(Owner.name, Owner.id).tuples())
+        lid = dict(Label.select(Label.label, Label.id).tuples())
         self.assertEqual(rows, [
             {
-                'id': 1,
+                'id': gid['family'],
                 'name': 'family',
-                'owner': {'id': 1, 'name': 'charlie'},
-                'labels': [{'id': 1, 'label': 'nuggie'},
-                           {'id': 2, 'label': 'bearbe'}],
+                'owner': {'id': oid['charlie'], 'name': 'charlie'},
+                'labels': [{'id': lid['nuggie'], 'label': 'nuggie'},
+                           {'id': lid['bearbe'], 'label': 'bearbe'}],
             },
             {
-                'id': 3,
+                'id': gid['misc'],
                 'name': 'misc',
-                'owner': {'id': 2, 'name': 'peers'},
-                'labels': [{'id': 1, 'label': 'nuggie'},
-                           {'id': 3, 'label': 'huey'}],
+                'owner': {'id': oid['peers'], 'name': 'peers'},
+                'labels': [{'id': lid['nuggie'], 'label': 'nuggie'},
+                           {'id': lid['huey'], 'label': 'huey'}],
             }])
 
     @requires_models(Student, Course, StudentCourse)
@@ -317,13 +320,13 @@ class TestModelToDict(ModelTestCase):
             ('s1', ('ca', 'cb', 'cc')),
             ('s2', ('cb', 'cd')),
             ('s3', ()))
-        c = {}
+        c, s = {}, {}
         for student, courses in data:
-            s = Student.create(name=student)
+            s[student] = Student.create(name=student)
             for course in courses:
                 if course not in c:
                     c[course] = Course.create(name=course)
-                StudentCourse.create(student=s, course=c[course])
+                StudentCourse.create(student=s[student], course=c[course])
 
         query = Student.select().order_by(Student.name)
         data = []
@@ -333,14 +336,14 @@ class TestModelToDict(ModelTestCase):
             data.append(user_dict)
 
         self.assertEqual(data, [
-            {'id': 1, 'name': 's1', 'courses': [
-                {'id': 1, 'name': 'ca'},
-                {'id': 2, 'name': 'cb'},
-                {'id': 3, 'name': 'cc'}]},
-            {'id': 2, 'name': 's2', 'courses': [
-                {'id': 2, 'name': 'cb'},
-                {'id': 4, 'name': 'cd'}]},
-            {'id': 3, 'name': 's3', 'courses': []}])
+            {'id': s['s1'].id, 'name': 's1', 'courses': [
+                {'id': c['ca'].id, 'name': 'ca'},
+                {'id': c['cb'].id, 'name': 'cb'},
+                {'id': c['cc'].id, 'name': 'cc'}]},
+            {'id': s['s2'].id, 'name': 's2', 'courses': [
+                {'id': c['cb'].id, 'name': 'cb'},
+                {'id': c['cd'].id, 'name': 'cd'}]},
+            {'id': s['s3'].id, 'name': 's3', 'courses': []}])
 
         query = Course.select().order_by(Course.name)
         data = []
@@ -350,15 +353,15 @@ class TestModelToDict(ModelTestCase):
             data.append(course_dict)
 
         self.assertEqual(data, [
-            {'id': 1, 'name': 'ca', 'students': [
-                {'id': 1, 'name': 's1'}]},
-            {'id': 2, 'name': 'cb', 'students': [
-                {'id': 1, 'name': 's1'},
-                {'id': 2, 'name': 's2'}]},
-            {'id': 3, 'name': 'cc', 'students': [
-                {'id': 1, 'name': 's1'}]},
-            {'id': 4, 'name': 'cd', 'students': [
-                {'id': 2, 'name': 's2'}]}])
+            {'id': c['ca'].id, 'name': 'ca', 'students': [
+                {'id': s['s1'].id, 'name': 's1'}]},
+            {'id': c['cb'].id, 'name': 'cb', 'students': [
+                {'id': s['s1'].id, 'name': 's1'},
+                {'id': s['s2'].id, 'name': 's2'}]},
+            {'id': c['cc'].id, 'name': 'cc', 'students': [
+                {'id': s['s1'].id, 'name': 's1'}]},
+            {'id': c['cd'].id, 'name': 'cd', 'students': [
+                {'id': s['s2'].id, 'name': 's2'}]}])
 
     def test_recurse_max_depth(self):
         t0, t1, t2 = [Tweet.create(user=self.user, content='t%s' % i)
@@ -538,15 +541,15 @@ class TestModelToDict(ModelTestCase):
     def test_model_to_dict_disabled_backref(self):
         host = Host.create(name='pi')
         Device.create(host=host, name='raspberry pi')
-        Service.create(host=host, name='ssh')
-        Service.create(host=host, name='vpn')
+        ssh = Service.create(host=host, name='ssh')
+        vpn = Service.create(host=host, name='vpn')
 
         data = model_to_dict(host, recurse=True, backrefs=True)
         services = sorted(data.pop('services'), key=operator.itemgetter('id'))
-        self.assertEqual(data, {'id': 1, 'name': 'pi'})
+        self.assertEqual(data, {'id': host.id, 'name': 'pi'})
         self.assertEqual(services, [
-            {'id': 1, 'name': 'ssh'},
-            {'id': 2, 'name': 'vpn'}])
+            {'id': ssh.id, 'name': 'ssh'},
+            {'id': vpn.id, 'name': 'vpn'}])
 
     @requires_models(Basket, Item)
     def test_empty_vs_null_fk(self):

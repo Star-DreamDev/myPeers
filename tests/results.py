@@ -256,8 +256,8 @@ class TestRowTypes(ModelTestCase):
 
     def test_dicts_flat(self):
         u = User.create(username='u1')
-        for i in range(3):
-            Tweet.create(user=u, content='t%d' % (i + 1))
+        tweets = [Tweet.create(user=u, content='t%d' % (i + 1))
+                  for i in range(3)]
 
         query = (Tweet
                  .select(Tweet, User.username)
@@ -267,9 +267,7 @@ class TestRowTypes(ModelTestCase):
         with self.assertQueryCount(1):
             results = [(r['id'], r['content'], r['username']) for r in query]
             self.assertEqual(results, [
-                (1, 't1', 'u1'),
-                (2, 't2', 'u1'),
-                (3, 't3', 'u1')])
+                (t.id, t.content, 'u1') for t in tweets])
 
     def test_model_objects(self):
         User.create(username='u1')

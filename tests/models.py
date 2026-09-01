@@ -2605,13 +2605,13 @@ class TestDeleteInstanceRegression(ModelTestCase):
             ('DELETE FROM "di_d" WHERE ("di_d"."c_id" IN ('
              'SELECT "t1"."id" FROM "di_c" AS "t1" WHERE ("t1"."b_id" IN ('
              'SELECT "t2"."id" FROM "di_b" AS "t2" WHERE ("t2"."a_id" = ?)'
-             '))))', [2]),
+             '))))', [a2.id]),
             ('DELETE FROM "di_c" WHERE ("di_c"."b_id" IN ('
              'SELECT "t1"."id" FROM "di_b" AS "t1" WHERE ("t1"."a_id" = ?)'
-             '))', [2]),
+             '))', [a2.id]),
             ('DELETE FROM "di_ba" WHERE ("di_ba"."a_id" = ?)', ['a2']),
-            ('DELETE FROM "di_b" WHERE ("di_b"."a_id" = ?)', [2]),
-            ('DELETE FROM "di_a" WHERE ("di_a"."id" = ?)', [2])
+            ('DELETE FROM "di_b" WHERE ("di_b"."a_id" = ?)', [a2.id]),
+            ('DELETE FROM "di_a" WHERE ("di_a"."id" = ?)', [a2.id])
         ])
 
         # a1 & a3 exist, plus their relations.
