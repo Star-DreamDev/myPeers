@@ -1,4 +1,5 @@
 import operator
+import threading
 
 from peers import *
 from playhouse.shortcuts import *
@@ -100,7 +101,6 @@ class Node(TestModel):
 
 
 class TestModelToDict(ModelTestCase):
-    database = get_in_memory_db()
     requires = [User, Tweet, Tag, TweetTag]
 
     def setUp(self):
@@ -477,7 +477,7 @@ class TestModelToDict(ModelTestCase):
                  .select(User.username, fn.COUNT(Tweet.id).alias('ct'))
                  .join(Tweet, JOIN.LEFT_OUTER)
                  .group_by(User.username)
-                 .order_by(User.id))
+                 .order_by(User.username))
         with self.assertQueryCount(1):
             u0, u1, u2 = list(query)
             self.assertEqual(model_to_dict(u0, fields_from_query=query), {
@@ -561,7 +561,6 @@ class TestModelToDict(ModelTestCase):
 
 
 class TestDictToModel(ModelTestCase):
-    database = get_in_memory_db()
     requires = [User, Tweet, Tag, TweetTag]
 
     def setUp(self):
@@ -874,6 +873,45 @@ class TestThreadSafeDatabaseMetadata(BaseTestCase):
 
         # In the main thread the original database has not been altered.
         self.assertTrue(M._meta.database is d1)
+
+
+class TestThreadSafeMetaRegression(ModelTestCase):
+    def test_thread_safe_meta(self):
+        d1 = get_in_memory_db()
+        d2 = get_in_memory_db()
+
+        class Meta:
+            database = d1
+            model_metadata_class = ThreadSafeDatabaseMetadata
+        attrs = {'Meta': Meta}
+        for i in range(1, 30):
+            attrs['f%d' % i] = IntegerField()
+        M = type('M', (TestModel,), attrs)
+
+        sql = ('SELECT "t1"."f1", "t1"."f2", "t1"."f3", "t1"."f4" '
+               'FROM "m" AS "t1"')
+        query = M.select(M.f1, M.f2, M.f3, M.f4)
+
+        def swap_db():
+            for i in range(100):
+                self.assertEqual(M._meta.database, d1)
+                self.assertSQL(query, sql)
+                with d2.bind_ctx([M]):
+                    self.assertEqual(M._meta.database, d2)
+                    self.assertSQL(query, sql)
+                self.assertEqual(M._meta.database, d1)
+                self.assertSQL(query, sql)
+
+        # From a separate thread, swap the database and verify it works
+        # correctly.
+        threads = [threading.Thread(target=swap_db)
+                   for i in range(10)]
+        for t in threads: t.start()
+        for t in threads: t.join()
+
+        # In the main thread the original database has not been altered.
+        self.assertEqual(M._meta.database, d1)
+        self.assertSQL(query, sql)
 
 
 class TIW(TestModel):

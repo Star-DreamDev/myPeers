@@ -1,5 +1,4 @@
 import datetime
-import os
 import re
 import warnings
 
@@ -10,13 +9,9 @@ from .base import IS_CRDB
 from .base import IS_CYSQLITE
 from .base import IS_MYSQL
 from .base import IS_ORACLE_MYSQL
-from .base import IS_POSTGRESQL
 from .base import IS_SQLITE
-from .base import IS_SQLITE_OLD
 from .base import ModelTestCase
 from .base import TestModel
-from .base import db
-from .base import requires_models
 from .base import requires_postgresql
 from .base import requires_sqlite
 from .base import skip_if
@@ -73,12 +68,6 @@ class Category(TestModel):
 class Nugget(TestModel):
     category_id = ForeignKeyField(Category, column_name='category_id')
     category = CharField()
-
-
-class NoPK(TestModel):
-    data = CharField()
-    class Meta:
-        primary_key = False
 
 
 class BaseReflectionTestCase(ModelTestCase):
@@ -494,6 +483,12 @@ class TestReflection(BaseReflectionTestCase):
                                 '%s not in %s' % (actual, fields))
 
 
+class NoPK(TestModel):
+    data = CharField()
+    class Meta:
+        primary_key = False
+
+
 class NoPKId(TestModel):
     id = IntegerField()
     data = CharField()
@@ -708,7 +703,6 @@ class TestReflectViews(BaseReflectionTestCase):
         self.assertTrue(isinstance(NotesPublic.content, TextField))
         self.assertTrue(isinstance(NotesPublic.timestamp, DateTimeField))
 
-    @skip_if(IS_SQLITE_OLD)
     @skip_if(IS_CRDB, 'crdb does not respect order by in view def')
     def test_introspect_view_integration(self):
         for i, (ct, st) in enumerate([('n1', 1), ('n2', 2), ('n3', 1)]):
@@ -723,29 +717,35 @@ class TestReflectViews(BaseReflectionTestCase):
 
 
 class TestCyclicalFK(BaseReflectionTestCase):
-    def setUp(self):
-        super(TestCyclicalFK, self).setUp()
-        warnings.filterwarnings('ignore')
+    def tearDown(self):
+        # Raw tables, so ModelTestCase will not clean them up. Leaving them
+        # behind makes every later whole-database introspection warn about
+        # the cycle.
+        for table in ('flow_run_state', 'flow_run'):
+            self.database.execute_sql('DROP TABLE IF EXISTS %s' % table)
+        super(TestCyclicalFK, self).tearDown()
 
     @requires_sqlite
     @skip_if(IS_CYSQLITE, 'cysqlite does not implement cursor at the moment.')
     def test_cyclical_fk(self):
-        # NOTE: this schema was provided by a user.
-        cursor = self.database.cursor()
-        cursor.executescript(
-            'CREATE TABLE flow_run_state (id CHAR(36) NOT NULL, '
-            'flow_run_id CHAR(36) NOT NULL, '
-	    'CONSTRAINT pk_flow_run_state PRIMARY KEY (id), '
-	    'CONSTRAINT fk_flow_run_state__flow_run_id__flow_run '
-            'FOREIGN KEY(flow_run_id) REFERENCES flow_run (id) '
-            'ON DELETE cascade); '
-            'CREATE TABLE flow_run (id CHAR(36) NOT NULL, '
-	    'state_id CHAR(36) NOT NULL, '
-	    'CONSTRAINT pk_flow_run PRIMARY KEY (id), '
-	    'CONSTRAINT fk_flow_run__state_id__flow_run_state '
-            'FOREIGN KEY(state_id) REFERENCES flow_run_state (id) '
-            'ON DELETE SET NULL);')
-        M = self.introspector.generate_models()
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore')
+            # NOTE: this schema was provided by a user.
+            cursor = self.database.cursor()
+            cursor.executescript(
+                'CREATE TABLE flow_run_state (id CHAR(36) NOT NULL, '
+                'flow_run_id CHAR(36) NOT NULL, '
+                'CONSTRAINT pk_flow_run_state PRIMARY KEY (id), '
+                'CONSTRAINT fk_flow_run_state__flow_run_id__flow_run '
+                'FOREIGN KEY(flow_run_id) REFERENCES flow_run (id) '
+                'ON DELETE cascade); '
+                'CREATE TABLE flow_run (id CHAR(36) NOT NULL, '
+                'state_id CHAR(36) NOT NULL, '
+                'CONSTRAINT pk_flow_run PRIMARY KEY (id), '
+                'CONSTRAINT fk_flow_run__state_id__flow_run_state '
+                'FOREIGN KEY(state_id) REFERENCES flow_run_state (id) '
+                'ON DELETE SET NULL);')
+            M = self.introspector.generate_models()
         FRS = M['flow_run_state']
         FR = M['flow_run']
         self.assertEqual(sorted(FR._meta.fields), ['id', 'state'])

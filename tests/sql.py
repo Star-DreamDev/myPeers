@@ -4,19 +4,8 @@ SQL generation tests for Table-level (non-Model) queries.
 These tests verify that the query builder produces correct SQL from raw Table
 objects, without involving Model metaclass machinery. Table objects are
 lightweight and internal to query building.
-
-Test case ordering:
-
-* Core DML: SELECT, INSERT, UPDATE, DELETE
-* Advanced SELECT features: window functions, VALUES lists, CASE
-* Miscellaneous SELECT features: FOR UPDATE, RETURNING, etc.
-* Expression SQL
-* ON CONFLICT (per-dialect: SQLite, MySQL, PostgreSQL)
-* Index generation
-* Utilities and edge cases
 """
 import datetime
-import re
 
 from peers import *
 from peers import Alias
@@ -37,10 +26,6 @@ from peers import Window
 from peers import query_to_string
 
 from .base import BaseTestCase
-from .base import TestModel
-from .base import db
-from .base import requires_mysql
-from .base import requires_sqlite
 from .base import __sql__
 
 
@@ -198,13 +183,6 @@ class TestSelectQuery(BaseTestCase):
             'WHERE (("t1"."dob" > ?) OR ("t1"."dob" < ?))'),
             [datetime.date(1980, 1, 1), datetime.date(1950, 1, 1)])
 
-    def test_where_convert_to_is_null(self):
-        Note = Table('notes', ('id', 'content', 'user_id'))
-        query = Note.select().where(Note.user_id == None)
-        self.assertSQL(query, (
-            'SELECT "t1"."id", "t1"."content", "t1"."user_id" '
-            'FROM "notes" AS "t1" WHERE ("t1"."user_id" IS NULL)'), [])
-
     def test_select_in_list_of_values(self):
         names_vals = [
             ['charlie', 'huey'],
@@ -232,14 +210,6 @@ class TestSelectQuery(BaseTestCase):
             'FROM "person" AS "t1" '
             'WHERE ("t1"."id" IN (?, ?, ?, ?, ?))'), [1, 3, 5, 7, 9])
 
-    def test_in_value_representation(self):
-        query = (User
-                 .select(User.c.id)
-                 .where(User.c.username.in_(['foo', 'bar', 'baz'])))
-        self.assertSQL(query, (
-            'SELECT "t1"."id" FROM "users" AS "t1" '
-            'WHERE ("t1"."username" IN (?, ?, ?))'), ['foo', 'bar', 'baz'])
-
     def test_empty_in(self):
         query = User.select(User.c.id).where(User.c.username.in_([]))
         self.assertSQL(query, (
@@ -264,7 +234,7 @@ class TestSelectQuery(BaseTestCase):
         self.assertSQL(query, (
             'SELECT "t1"."id" FROM "users" AS "t1" WHERE (1 = 1)'))
 
-        # An empty generator is one-shot; materialize it so it is caught too.
+        # An empty generator is one-shot. Materialize it so it is caught too.
         query = User.select(User.c.id).where(User.c.id.in_(i for i in []))
         self.assertSQL(query, (
             'SELECT "t1"."id" FROM "users" AS "t1" WHERE (0 = 1)'))
@@ -723,18 +693,6 @@ class TestSelectQuery(BaseTestCase):
             'SELECT "t2"."username" FROM "users" AS "t2" '
             'WHERE ("t2"."is_staff" = ?)) '
             'SELECT "c1"."username", "c2"."username" FROM "c1", "c2"'), [1, 1])
-
-    def test_cte_select_from_2(self):
-        cte = (User
-               .select(User.c.username)
-               .where(User.c.username != 'x')
-               .cte('filtered'))
-        query = cte.select_from(cte.c.username)
-        self.assertSQL(query, (
-            'WITH "filtered" AS ('
-            'SELECT "t1"."username" FROM "users" AS "t1" '
-            'WHERE ("t1"."username" != ?)) '
-            'SELECT "filtered"."username" FROM "filtered"'), ['x'])
 
     def test_cte_select_from_with_aggregate(self):
         cte = (User
@@ -1510,8 +1468,8 @@ class TestSelectQuery(BaseTestCase):
     def test_correlated_compound_subquery(self):
         # A compound (UNION/INTERSECT/EXCEPT) used as a correlated subquery
         # must reference the outer table by its existing alias in *every*
-        # branch. The right-hand branch renders in a fresh alias scope;
-        # regression test for it assigning the correlated outer source a
+        # branch. The right-hand branch renders in a fresh alias scope.
+        # Regression test for it assigning the correlated outer source a
         # phantom new alias instead of reusing the outer "t1".
         Product = Table('product', ('id', 'name'))
         SaleA = Table('sale_a', ('id', 'pid', 'amt'))
@@ -1682,8 +1640,8 @@ class TestSelectQuery(BaseTestCase):
             [1, True])
 
     def test_lateral_helper(self):
-        # The .lateral() helper prefixes LATERAL on the source; the join type
-        # comes from .join(). Mirrors the execution test in tests/postgres.py.
+        # The .lateral() helper prefixes LATERAL on the source. The join type
+        # comes from .join(). Mirrors the execution test in tests/models.py.
         inner = (Tweet
                  .select(Tweet.c.content)
                  .where(Tweet.c.user_id == User.c.id)
@@ -1872,33 +1830,29 @@ class TestSelectQuery(BaseTestCase):
 
     def test_like_escape(self):
         T = Table('tbl', ('key',))
-        def assertLike(expr, expected):
-            query = T.select().where(expr)
-            sql, params = __sql__(T.select().where(expr))
-            match_obj = re.search(r'\("t1"."key" (ILIKE[^\)]+)\)', sql)
-            if match_obj is None:
-                raise AssertionError('LIKE expression not found in query.')
-            like, = match_obj.groups()
-            self.assertEqual((like, params), expected)
+        def assertLike(expr, like_clause, params):
+            self.assertSQL(T.select().where(expr), (
+                'SELECT "t1"."key" FROM "tbl" AS "t1" '
+                'WHERE ("t1"."key" %s)' % like_clause), params)
 
         cases = (
-            (T.key.contains('base'), ('ILIKE ?', ['%base%'])),
-            (T.key.contains('x_y'), ("ILIKE ? ESCAPE ?", ['%x\\_y%', '\\'])),
-            (T.key.contains('__y'), ("ILIKE ? ESCAPE ?", ['%\\_\\_y%', '\\'])),
-            (T.key.contains('%'), ("ILIKE ? ESCAPE ?", ['%\\%%', '\\'])),
-            (T.key.contains('_%'), ("ILIKE ? ESCAPE ?", ['%\\_\\%%', '\\'])),
-            (T.key.startswith('base'), ("ILIKE ?", ['base%'])),
-            (T.key.startswith('x_y'), ("ILIKE ? ESCAPE ?", ['x\\_y%', '\\'])),
-            (T.key.startswith('x%'), ("ILIKE ? ESCAPE ?", ['x\\%%', '\\'])),
-            (T.key.startswith('_%'), ("ILIKE ? ESCAPE ?", ['\\_\\%%', '\\'])),
-            (T.key.endswith('base'), ("ILIKE ?", ['%base'])),
-            (T.key.endswith('x_y'), ("ILIKE ? ESCAPE ?", ['%x\\_y', '\\'])),
-            (T.key.endswith('x%'), ("ILIKE ? ESCAPE ?", ['%x\\%', '\\'])),
-            (T.key.endswith('_%'), ("ILIKE ? ESCAPE ?", ['%\\_\\%', '\\'])),
+            (T.key.contains('base'), 'ILIKE ?', ['%base%']),
+            (T.key.contains('x_y'), 'ILIKE ? ESCAPE ?', ['%x\\_y%', '\\']),
+            (T.key.contains('__y'), 'ILIKE ? ESCAPE ?', ['%\\_\\_y%', '\\']),
+            (T.key.contains('%'), 'ILIKE ? ESCAPE ?', ['%\\%%', '\\']),
+            (T.key.contains('_%'), 'ILIKE ? ESCAPE ?', ['%\\_\\%%', '\\']),
+            (T.key.startswith('base'), 'ILIKE ?', ['base%']),
+            (T.key.startswith('x_y'), 'ILIKE ? ESCAPE ?', ['x\\_y%', '\\']),
+            (T.key.startswith('x%'), 'ILIKE ? ESCAPE ?', ['x\\%%', '\\']),
+            (T.key.startswith('_%'), 'ILIKE ? ESCAPE ?', ['\\_\\%%', '\\']),
+            (T.key.endswith('base'), 'ILIKE ?', ['%base']),
+            (T.key.endswith('x_y'), 'ILIKE ? ESCAPE ?', ['%x\\_y', '\\']),
+            (T.key.endswith('x%'), 'ILIKE ? ESCAPE ?', ['%x\\%', '\\']),
+            (T.key.endswith('_%'), 'ILIKE ? ESCAPE ?', ['%\\_\\%', '\\']),
         )
 
-        for expr, expected in cases:
-            assertLike(expr, expected)
+        for expr, like_clause, params in cases:
+            assertLike(expr, like_clause, params)
 
     def test_like_expr(self):
         query = User.select(User.c.id).where(User.c.username.like('%foo%'))
@@ -2021,31 +1975,6 @@ class TestInsertQuery(BaseTestCase):
             'INSERT INTO "users" ("admin", "superuser", "username") '
             'VALUES (?, ?, ?)'), [True, False, 'charlie'])
 
-    @requires_sqlite
-    def test_replace_sqlite(self):
-        query = User.replace({
-            User.c.username: 'charlie',
-            User.c.superuser: False})
-        self.assertSQL(query, (
-            'INSERT OR REPLACE INTO "users" ("superuser", "username") '
-            'VALUES (?, ?)'), [False, 'charlie'])
-
-        query = User.replace(
-            username='charlie',
-            superuser=False)
-        self.assertSQL(query, (
-            'INSERT OR REPLACE INTO "users" ("superuser", "username") '
-            'VALUES (?, ?)'), [False, 'charlie'])
-
-    @requires_mysql
-    def test_replace_mysql(self):
-        query = User.replace({
-            User.c.username: 'charlie',
-            User.c.superuser: False})
-        self.assertSQL(query, (
-            'REPLACE INTO "users" ("superuser", "username") '
-            'VALUES (?, ?)'), [False, 'charlie'])
-
     def test_insert_list(self):
         data = [
             {Person.name: 'charlie'},
@@ -2153,18 +2082,6 @@ class TestInsertQuery(BaseTestCase):
             'RETURNING "person"."id", '
             '"person"."name", '
             'LENGTH("person"."name") AS "ulen"'), ['huey'])
-
-    def test_empty(self):
-        class Empty(TestModel): pass
-        if isinstance(db, MySQLDatabase):
-            sql = 'INSERT INTO "empty" () VALUES ()'
-        elif isinstance(db, PostgresqlDatabase):
-            sql = 'INSERT INTO "empty" DEFAULT VALUES RETURNING "empty"."id"'
-        else:
-            sql = 'INSERT INTO "empty" DEFAULT VALUES'
-
-        for query in (Empty.insert(), Empty.insert({}), Empty.insert([])):
-            self.assertSQL(query, sql, [])
 
     def test_insert_where_raises(self):
         q = User.insert({User.c.username: 'huey'})
@@ -2512,15 +2429,13 @@ class TestWindowFunctions(BaseTestCase):
             'FROM "register" AS "t1"'), [])
 
     def test_frame_types(self):
-        def assertFrame(over_kwargs, expected):
+        def assertFrame(over_kwargs, over_clause):
             query = Register.select(
                 Register.value,
                 fn.SUM(Register.value).over(**over_kwargs))
-            sql, params = __sql__(query)
-            match_obj = re.search(r'OVER \((.*?)\) FROM', sql)
-            self.assertTrue(match_obj is not None)
-            self.assertEqual(match_obj.groups()[0], expected)
-            self.assertEqual(params, [])
+            self.assertSQL(query, (
+                'SELECT "t1"."value", SUM("t1"."value") '
+                'OVER (%s) FROM "register" AS "t1"' % over_clause), [])
 
         # No parameters -- empty OVER().
         assertFrame({}, (''))
@@ -2926,25 +2841,6 @@ class TestValuesList(BaseTestCase):
             'FROM (VALUES (?, ?), (?, ?), (?, ?)) AS "vl"("idx", "name") '
             'ORDER BY "vl"."idx"'), [1, 'one', 2, 'two', 3, 'three'])
 
-    def test_docs_examples(self):
-        data = [(1, 'first'), (2, 'second')]
-        vl = ValuesList(data, columns=('idx', 'name'))
-        query = (vl
-                 .select(vl.c.idx, vl.c.name)
-                 .order_by(vl.c.idx))
-        self.assertSQL(query, (
-            'SELECT "t1"."idx", "t1"."name" '
-            'FROM (VALUES (?, ?), (?, ?)) AS "t1"("idx", "name") '
-            'ORDER BY "t1"."idx"'), [1, 'first', 2, 'second'])
-
-        vl = ValuesList([(1, 'first'), (2, 'second')])
-        vl = vl.columns('idx', 'name').alias('v')
-        query = vl.select(vl.c.idx, vl.c.name)
-        self.assertSQL(query, (
-            'SELECT "v"."idx", "v"."name" '
-            'FROM (VALUES (?, ?), (?, ?)) AS "v"("idx", "name")'),
-            [1, 'first', 2, 'second'])
-
     def test_join_on_valueslist(self):
         vl = ValuesList([('huey',), ('zaizee',)], columns=['username'])
         query = (User
@@ -3274,12 +3170,27 @@ class TestOnConflictSqlite(BaseTestCase):
         self.assertSQL(query, (
             'INSERT OR REPLACE INTO "person" ("name") VALUES (?)'), ['huey'])
 
+    def test_replace_shortcut(self):
+        query = User.replace({
+            User.c.username: 'charlie',
+            User.c.superuser: False})
+        self.assertSQL(query, (
+            'INSERT OR REPLACE INTO "users" ("superuser", "username") '
+            'VALUES (?, ?)'), [False, 'charlie'])
+
+        query = User.replace(
+            username='charlie',
+            superuser=False)
+        self.assertSQL(query, (
+            'INSERT OR REPLACE INTO "users" ("superuser", "username") '
+            'VALUES (?, ?)'), [False, 'charlie'])
+
     def test_ignore(self):
         query = Person.insert(name='huey').on_conflict('ignore')
         self.assertSQL(query, (
             'INSERT OR IGNORE INTO "person" ("name") VALUES (?)'), ['huey'])
 
-    def test_update_not_supported(self):
+    def test_update_requires_conflict_target(self):
         query = Person.insert(name='huey').on_conflict(
             preserve=(Person.dob,),
             update={Person.name: Person.name.concat(' (updated)')})
@@ -3345,6 +3256,14 @@ class TestOnConflictMySQL(BaseTestCase):
         query = Person.insert(name='huey').on_conflict('replace')
         self.assertSQL(query, (
             'REPLACE INTO "person" ("name") VALUES (?)'), ['huey'])
+
+    def test_replace_shortcut(self):
+        query = User.replace({
+            User.c.username: 'charlie',
+            User.c.superuser: False})
+        self.assertSQL(query, (
+            'REPLACE INTO "users" ("superuser", "username") '
+            'VALUES (?, ?)'), [False, 'charlie'])
 
     def test_ignore(self):
         query = Person.insert(name='huey').on_conflict('ignore')

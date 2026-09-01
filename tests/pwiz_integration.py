@@ -1,4 +1,3 @@
-import datetime
 import os
 import textwrap
 import sys
@@ -11,10 +10,9 @@ from pwiz import *
 from .base import ModelTestCase
 from .base import TestModel
 from .base import db_loader
-from .base import skip_if
 
 
-db = db_loader('sqlite')
+db = db_loader('sqlite', 'peers_pwiz')
 
 
 class User(TestModel):
@@ -67,7 +65,7 @@ class capture_output(object):
 EXPECTED = """
 from peers import *
 
-database = SqliteDatabase('peers_test.db')
+database = SqliteDatabase('peers_pwiz.db')
 
 class UnknownField(object):
     def __init__(self, *_, **__): pass
@@ -107,7 +105,7 @@ class Note(BaseModel):
 EXPECTED_ORDERED = """
 from peers import *
 
-database = SqliteDatabase('peers_test.db')
+database = SqliteDatabase('peers_pwiz.db')
 
 class UnknownField(object):
     def __init__(self, *_, **__): pass
@@ -141,6 +139,12 @@ class Note(BaseModel):
 class BasePwizTestCase(ModelTestCase):
     database = db
     requires = []
+    header = ('from peers import *\n\n'
+              'database = SqliteDatabase(\'peers_pwiz.db\')\n\n')
+    unknown = ('class UnknownField(object):\n'
+               '    def __init__(self, *_, **__): pass\n\n')
+    basemodel = ('class BaseModel(Model):\n    class Meta:\n'
+                 '        database = database\n\n')
 
     def setUp(self):
         if not self.database.is_closed():
@@ -189,13 +193,6 @@ class TestPwizOrdered(BasePwizTestCase):
 
 
 class TestPwizUnknownField(BasePwizTestCase):
-    header = ('from peers import *\n\n'
-              'database = SqliteDatabase(\'peers_test.db\')\n\n')
-    unknown = ('class UnknownField(object):\n'
-               '    def __init__(self, *_, **__): pass\n\n')
-    basemodel = ('class BaseModel(Model):\n    class Meta:\n'
-                 '        database = database\n\n')
-
     def setUp(self):
         super(TestPwizUnknownField, self).setUp()
         self.database.execute_sql(
@@ -232,7 +229,6 @@ class TestPwizInvalidColumns(BasePwizTestCase):
         with capture_output() as output:
             print_models(self.introspector)
 
-        result = output.data.strip()
         expected = textwrap.dedent("""
             class OddColumnNames(BaseModel):
                 camel_case_name = CharField(column_name='camelCaseName')
@@ -242,14 +238,13 @@ class TestPwizInvalidColumns(BasePwizTestCase):
                 class Meta:
                     table_name = 'oddColumnNames'""").strip()
 
-        actual = result[-len(expected):]
-        self.assertEqual(actual, expected)
+        self.assertEqual(output.data.strip(), (
+            self.header + self.unknown + self.basemodel + expected))
 
     def test_odd_columns_legacy(self):
         with capture_output() as output:
             print_models(self.introspector, snake_case=False)
 
-        result = output.data.strip()
         expected = textwrap.dedent("""
             class Oddcolumnnames(BaseModel):
                 camelcasename = CharField(column_name='camelCaseName')
@@ -259,8 +254,8 @@ class TestPwizInvalidColumns(BasePwizTestCase):
                 class Meta:
                     table_name = 'oddColumnNames'""").strip()
 
-        actual = result[-len(expected):]
-        self.assertEqual(actual, expected)
+        self.assertEqual(output.data.strip(), (
+            self.header + self.unknown + self.basemodel + expected))
 
 
 class TestPwizIntrospectViews(BasePwizTestCase):
@@ -275,32 +270,33 @@ class TestPwizIntrospectViews(BasePwizTestCase):
         self.database.execute_sql('DROP VIEW "events_public"')
         super(TestPwizIntrospectViews, self).tearDown()
 
+    event_tbl = textwrap.dedent("""
+        class Event(BaseModel):
+            data = TextField()
+            status = IntegerField()
+
+            class Meta:
+                table_name = 'event'""").strip()
+
+    event_view = textwrap.dedent("""
+        class EventsPublic(BaseModel):
+            data = TextField(null=True)
+
+            class Meta:
+                table_name = 'events_public'
+                primary_key = False""").strip()
+
     def test_introspect_ignore_views(self):
         # By default views are not included in the output.
         with capture_output() as output:
             print_models(self.introspector)
-        self.assertFalse('events_public' in output.data.strip())
+        self.assertEqual(output.data.strip(), (
+            self.header + self.unknown + self.basemodel + self.event_tbl))
 
     def test_introspect_views(self):
         # Views can be introspected, however.
         with capture_output() as output:
             print_models(self.introspector, include_views=True)
-
-        result = output.data.strip()
-        event_tbl = textwrap.dedent("""
-            class Event(BaseModel):
-                data = TextField()
-                status = IntegerField()
-
-                class Meta:
-                    table_name = 'event'""").strip()
-        self.assertTrue(event_tbl in result)
-
-        event_view = textwrap.dedent("""
-            class EventsPublic(BaseModel):
-                data = TextField(null=True)
-
-                class Meta:
-                    table_name = 'events_public'
-                    primary_key = False""").strip()
-        self.assertTrue(event_view in result)
+        self.assertEqual(output.data.strip(), (
+            self.header + self.unknown + self.basemodel + self.event_tbl +
+            '\n\n' + self.event_view))

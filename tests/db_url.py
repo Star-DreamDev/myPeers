@@ -63,10 +63,6 @@ class TestDBUrl(BaseTestCase):
             ('journal_mode', 'MEMORY'),))
         self.assertTrue(('journal_mode', 'MEMORY') in db._pragmas)
 
-        #db = connect('sqliteext:///foo/bar.db')
-        #self.assertTrue(isinstance(db, SqliteExtDatabase))
-        #self.assertEqual(db.database, 'foo/bar.db')
-
         db = connect('sqlite:////this/is/absolute.path')
         self.assertEqual(db.database, '/this/is/absolute.path')
 

@@ -1,23 +1,11 @@
 """
 ManyToManyField behavior tests: through models (auto and explicit), backrefs,
 inheritance, FK-to-non-PK, FK-as-PK, and multiple M2M on same tables.
-
-Test case ordering:
-
-* Core M2M operations (User/Note - the largest test class)
-* Backref behavior (Student/Course)
-* Inheritance of M2M through models
-* FK-to-non-PK M2M (Color/Logo with non-PK FK)
-* FK-as-PK M2M (Person/Account/AccountList)
-* Multiple M2M between same tables (Permission/Visitor)
-* Errors / edge cases.
 """
 from peers import *
 
 from .base import ModelTestCase
 from .base import TestModel
-from .base import get_in_memory_db
-from .base import requires_models
 
 
 # ---------------------------------------------------------------------------
@@ -25,8 +13,10 @@ from .base import requires_models
 # NOTE: User and Note here are local to this module (not base_models).
 # ---------------------------------------------------------------------------
 
+# M2M binding installs accessors on the rel model at import, so the local
+# User stays local.
 class User(TestModel):
-    username = TextField(unique=True)
+    username = CharField(unique=True)  # CharField: mysql cannot index TEXT.
 
 class Note(TestModel):
     text = TextField()
@@ -49,39 +39,6 @@ class AltThroughModel(TestModel):
 
 AltThroughDeferred.set_model(AltThroughModel)
 
-class Student(TestModel):
-    name = TextField()
-
-CourseStudentDeferred = DeferredThroughModel()
-
-class Course(TestModel):
-    name = TextField()
-    students = ManyToManyField(Student, backref='+')
-    students2 = ManyToManyField(Student, through_model=CourseStudentDeferred)
-
-CourseStudent = Course.students.get_through_model()
-
-class CourseStudent2(TestModel):
-    course = ForeignKeyField(Course, backref='+')
-    student = ForeignKeyField(Student, backref='+')
-
-CourseStudentDeferred.set_model(CourseStudent2)
-
-
-class Color(TestModel):
-    name = TextField(unique=True)
-
-LogoColorDeferred = DeferredThroughModel()
-
-class Logo(TestModel):
-    name = TextField(unique=True)
-    colors = ManyToManyField(Color, through_model=LogoColorDeferred)
-
-class LogoColor(TestModel):
-    logo = ForeignKeyField(Logo, field=Logo.name)
-    color = ForeignKeyField(Color, field=Color.name)  # FK to non-PK column.
-
-LogoColorDeferred.set_model(LogoColor)
 
 
 # ===========================================================================
@@ -89,7 +46,6 @@ LogoColorDeferred.set_model(LogoColor)
 # ===========================================================================
 
 class TestManyToMany(ModelTestCase):
-    database = get_in_memory_db()
     requires = [User, Note, NoteUserThrough, AltNote, AltThroughModel]
 
     user_to_note = {
@@ -429,8 +385,26 @@ class TestManyToMany(ModelTestCase):
 # Backref behavior, inheritance, and FK-to-non-PK
 # ===========================================================================
 
+class Student(TestModel):
+    name = TextField()
+
+CourseStudentDeferred = DeferredThroughModel()
+
+class Course(TestModel):
+    name = TextField()
+    students = ManyToManyField(Student, backref='+')
+    students2 = ManyToManyField(Student, through_model=CourseStudentDeferred)
+
+CourseStudent = Course.students.get_through_model()
+
+class CourseStudent2(TestModel):
+    course = ForeignKeyField(Course, backref='+')
+    student = ForeignKeyField(Student, backref='+')
+
+CourseStudentDeferred.set_model(CourseStudent2)
+
+
 class TestManyToManyBackrefBehavior(ModelTestCase):
-    database = get_in_memory_db()
     requires = [Student, Course, CourseStudent, CourseStudent2]
 
     def setUp(self):
@@ -501,8 +475,23 @@ class TestManyToManyInheritance(ModelTestCase):
         self.assertTrue(PThrough.user.rel_model is User)
 
 
+class Color(TestModel):
+    name = CharField(unique=True)  # CharField: mysql cannot index TEXT.
+
+LogoColorDeferred = DeferredThroughModel()
+
+class Logo(TestModel):
+    name = CharField(unique=True)  # CharField: mysql cannot index TEXT.
+    colors = ManyToManyField(Color, through_model=LogoColorDeferred)
+
+class LogoColor(TestModel):
+    logo = ForeignKeyField(Logo, field=Logo.name)
+    color = ForeignKeyField(Color, field=Color.name)  # FK to non-PK column.
+
+LogoColorDeferred.set_model(LogoColor)
+
+
 class TestManyToManyFKtoNonPK(ModelTestCase):
-    database = get_in_memory_db()
     requires = [Color, Logo, LogoColor]
 
     def test_manytomany_fk_to_non_pk(self):
@@ -589,7 +578,6 @@ AccountListThrough = AccountList.accounts.get_through_model()
 
 
 class TestForeignKeyPrimaryKeyManyToMany(ModelTestCase):
-    database = get_in_memory_db()
     requires = [Person, Account, AccountList, AccountListThrough]
     test_data = (
         ('huey', ('cats', 'evil')),
@@ -654,7 +642,6 @@ DeniedThroughDeferred.set_model(DeniedThrough)
 
 
 class TestMultipleManyToManySameTables(ModelTestCase):
-    database = get_in_memory_db()
     requires = [Permission, Visitor, Visitor.allowed.through_model,
                 Visitor.denied.through_model]
 
@@ -688,7 +675,6 @@ class TestMultipleManyToManySameTables(ModelTestCase):
 # ===========================================================================
 
 class TestManyToManyPreventUnsaved(ModelTestCase):
-    database = get_in_memory_db()
     requires = [User, Note, NoteUserThrough]
 
     def test_m2m_unsaved_raises(self):
@@ -717,7 +703,6 @@ class TestManyToManyPreventUnsaved(ModelTestCase):
 
 
 class TestManyToManyInitErrors(ModelTestCase):
-    database = get_in_memory_db()
 
     def test_invalid_through_model_type(self):
         with self.assertRaises(TypeError):
@@ -739,7 +724,6 @@ class TestManyToManyInitErrors(ModelTestCase):
 
 
 class TestManyToManyEmptyOperations(ModelTestCase):
-    database = get_in_memory_db()
     requires = [User, Note, NoteUserThrough]
 
     def test_add_empty_list(self):
@@ -773,7 +757,6 @@ BangThroughDeferred.set_model(BangThroughModel)
 
 
 class TestM2MBangBackref(ModelTestCase):
-    database = get_in_memory_db()
     requires = [User, BangNote, BangThroughModel]
 
     def test_backref_bang_sentinel(self):

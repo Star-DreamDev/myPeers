@@ -8,9 +8,7 @@ from io import StringIO
 
 from peers import *
 from playhouse.dataset import DataSet
-from playhouse.dataset import Table
 
-from .base import IS_SQLITE_OLD
 from .base import ModelTestCase
 from .base import TestModel
 from .base import get_sqlite_db
@@ -73,7 +71,6 @@ class TestDataSet(ModelTestCase):
         users.insert(username='charlie')
         self.assertEqual(list(users), [{'id': 1, 'username': 'charlie'}])
 
-    @skip_if(IS_SQLITE_OLD)
     def test_with_views(self):
         self.dataset.query('CREATE VIEW notes_public AS '
                            'SELECT content, timestamp FROM note '

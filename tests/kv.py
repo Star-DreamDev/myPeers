@@ -2,7 +2,6 @@ from peers import IntegerField
 from playhouse.kv import KeyValue
 
 from .base import DatabaseTestCase
-from .base import db
 
 
 class TestKeyValue(DatabaseTestCase):

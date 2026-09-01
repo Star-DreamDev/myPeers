@@ -7,7 +7,6 @@ from playhouse.fields import EnumFieldMixin
 from playhouse.fields import IntEnumField
 from playhouse.fields import PickleField
 
-from .base import db
 from .base import ModelTestCase
 from .base import TestModel
 

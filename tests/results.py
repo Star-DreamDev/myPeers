@@ -1,18 +1,12 @@
 """
 Cursor wrapper, row type, and query execution tests.
-
-Test case ordering:
-
-* Cursor wrapper behavior (iteration, slicing, indexing)
-* Row types (dicts, tuples, named tuples)
-* Specify converter
-* Raw query execution with Table objects
 """
 import datetime
 
 from peers import *
 
 from .base import get_in_memory_db
+from .base import BaseTestCase
 from .base import DatabaseTestCase
 from .base import ModelTestCase
 from .base_models import *
@@ -31,14 +25,13 @@ def lange(x, y=None):
 # ===========================================================================
 
 class TestCursorWrapper(ModelTestCase):
-    database = get_in_memory_db()
     requires = [User]
 
     def test_iteration(self):
         for i in range(10):
             User.create(username=str(i))
 
-        query = User.select()
+        query = User.select().order_by(User.id)
         cursor = query.execute()
 
         first_five = []
@@ -162,13 +155,18 @@ class TestCursorWrapper(ModelTestCase):
             self.assertTrue(cursor.populated)
             assertCache(cursor, 10)
 
+    def test_noop_cursor_wrapper_type(self):
+        from peers import CursorWrapper
+        query = User.noop()
+        result = query.execute()
+        self.assertIsInstance(result, CursorWrapper)
+
 
 # ===========================================================================
 # Row types (dicts, tuples, named tuples) and converter specification
 # ===========================================================================
 
 class TestRowTypes(ModelTestCase):
-    database = get_in_memory_db()
     requires = [User, Tweet]
 
     def make_query(self, *exprs):
@@ -338,6 +336,57 @@ class TestRowTypes(ModelTestCase):
                 (huey.id, 'huey', tids[1], 'purr'),
                 (mickey.id, 'mickey', tids[2], 'woof')])
 
+    def test_model_tuples(self):
+        User.create(username='huey')
+        result = list(User.select(User.username).tuples())
+        self.assertEqual(result, [('huey',)])
+
+    def test_model_tuples_with_join(self):
+        huey = User.create(username='huey')
+        Tweet.create(user=huey, content='meow')
+        Tweet.create(user=huey, content='purr')
+        query = (Tweet
+                 .select(Tweet.content, User.username)
+                 .join(User)
+                 .order_by(Tweet.content)
+                 .tuples())
+        result = list(query)
+        self.assertEqual(result, [('meow', 'huey'), ('purr', 'huey')])
+
+    def test_peek_n_model(self):
+        for name in ('alpha', 'bravo', 'charlie'):
+            User.create(username=name)
+        query = User.select().order_by(User.username)
+        rows = query.peek(n=2)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0].username, 'alpha')
+        self.assertEqual(rows[1].username, 'bravo')
+
+    def test_model_namedtuple_with_join(self):
+        u = User.create(username='huey')
+        Tweet.create(user=u, content='meow')
+        query = (Tweet
+                 .select(Tweet.content, User.username)
+                 .join(User)
+                 .namedtuples())
+        rows = list(query)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].content, 'meow')
+        self.assertEqual(rows[0].username, 'huey')
+
+    def test_model_raw_get_does_not_exist(self):
+        query = User.raw('SELECT * FROM users WHERE username = ' +
+                         self.database.param, 'nobody')
+        self.assertRaises(User.DoesNotExist, query.get)
+
+    def test_peek_empty_model(self):
+        query = User.select().where(User.username == 'nobody')
+        self.assertIsNone(query.peek(n=1))
+
+    def test_first_empty_model(self):
+        query = User.select().where(User.username == 'nobody')
+        self.assertIsNone(query.first())
+
 
 class Reg(TestModel):
     key = TextField()
@@ -387,6 +436,7 @@ QRegister = Table('register', ['id', 'value'])
 
 
 class TestQueryExecution(DatabaseTestCase):
+    # setUp writes raw sqlite DDL and the inserts rely on lastrowid.
     database = get_in_memory_db()
 
     def setUp(self):
@@ -533,45 +583,6 @@ class TestQueryExecution(DatabaseTestCase):
             self.assertEqual(query[-2:], [(5.,), (8.,)])
             self.assertEqual(query[2:-2], [(2.,), (3.,)])
 
-
-# ===========================================================================
-# Empty result edge cases and error paths
-# ===========================================================================
-
-class TestEmptyResultEdgeCases(DatabaseTestCase):
-    database = get_in_memory_db()
-
-    def setUp(self):
-        super(TestEmptyResultEdgeCases, self).setUp()
-        QUser.bind(self.database)
-        QRegister.bind(self.database)
-        self.execute('CREATE TABLE "users" (id INTEGER NOT NULL PRIMARY KEY, '
-                     'username TEXT)')
-        self.execute('CREATE TABLE "register" ('
-                     'id INTEGER NOT NULL PRIMARY KEY, '
-                     'value REAL)')
-
-    def tearDown(self):
-        self.execute('DROP TABLE "users"')
-        self.execute('DROP TABLE "register"')
-        super(TestEmptyResultEdgeCases, self).tearDown()
-
-    def test_count_empty(self):
-        self.assertEqual(QUser.select().count(), 0)
-
-    def test_exists_empty(self):
-        self.assertFalse(QUser.select().exists())
-
-    def test_first_empty(self):
-        self.assertIsNone(QUser.select().first())
-
-    def test_peek_empty(self):
-        self.assertIsNone(QUser.select().peek(n=1))
-
-    def test_get_empty(self):
-        self.assertIsNone(
-            QUser.select().where(QUser.username == 'nobody').get())
-
     def test_scalar_empty(self):
         result = QRegister.select(fn.MAX(QRegister.value)).scalar()
         self.assertIsNone(result)
@@ -601,176 +612,42 @@ class TestEmptyResultEdgeCases(DatabaseTestCase):
         query = QUser.select()
         self.assertEqual(query[:], [])
 
-
-class TestScalarVariants(DatabaseTestCase):
-    database = get_in_memory_db()
-
-    def setUp(self):
-        super(TestScalarVariants, self).setUp()
-        QRegister.bind(self.database)
-        self.execute('CREATE TABLE "register" ('
-                     'id INTEGER NOT NULL PRIMARY KEY, '
-                     'value REAL)')
+    def test_scalar_as_dict(self):
         for v in (10., 20., 30.):
             QRegister.insert({QRegister.value: v}).execute()
-
-    def tearDown(self):
-        self.execute('DROP TABLE "register"')
-        super(TestScalarVariants, self).tearDown()
-
-    def test_scalar(self):
-        result = QRegister.select(fn.SUM(QRegister.value)).scalar()
-        self.assertEqual(result, 60.)
-
-    def test_scalar_as_tuple(self):
-        result = (QRegister
-                  .select(fn.SUM(QRegister.value),
-                          fn.COUNT(QRegister.value))
-                  .scalar(as_tuple=True))
-        self.assertEqual(result, (60., 3))
-
-    def test_scalar_as_dict(self):
         result = (QRegister
                   .select(fn.SUM(QRegister.value).alias('total'),
                           fn.COUNT(QRegister.value).alias('ct'))
                   .scalar(as_dict=True))
         self.assertEqual(result, {'total': 60., 'ct': 3})
 
+    def test_getitem_invalid_type_error(self):
+        QUser.insert({QUser.username: 'u1'}).execute()
+        query = QUser.select()
+        cursor = query.execute()
+        self.assertRaises(ValueError, cursor.__getitem__, 'bad')
 
-# ===========================================================================
-# Model-level result type tests
-# ===========================================================================
+    def test_fill_cache_negative_error(self):
+        QUser.insert({QUser.username: 'u1'}).execute()
+        query = QUser.select()
+        cursor = query.execute()
+        self.assertRaises(ValueError, cursor.fill_cache, -1)
 
-class TestModelResultTypes(ModelTestCase):
-    database = get_in_memory_db()
-    requires = [User, Tweet]
-
-    def setUp(self):
-        super(TestModelResultTypes, self).setUp()
-        huey = User.create(username='huey')
-        Tweet.create(user=huey, content='meow')
-        Tweet.create(user=huey, content='purr')
-
-    def test_model_dicts(self):
-        result = list(User.select(User.username).dicts())
-        self.assertEqual(result, [{'username': 'huey'}])
-
-    def test_model_tuples(self):
-        result = list(User.select(User.username).tuples())
-        self.assertEqual(result, [('huey',)])
-
-    def test_model_namedtuples(self):
-        result = list(User.select(User.username).namedtuples())
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].username, 'huey')
-
-    def test_model_objects(self):
-        query = (Tweet
-                 .select(Tweet, User)
-                 .join(User)
-                 .order_by(Tweet.content)
-                 .objects())
-        results = list(query)
-        self.assertEqual(len(results), 2)
-        self.assertTrue(isinstance(results[0], Tweet))
-        self.assertEqual(results[0].content, 'meow')
-        self.assertEqual(results[0].username, 'huey')
-
-    def test_model_dicts_with_join(self):
-        query = (Tweet
-                 .select(Tweet.content, User.username)
-                 .join(User)
-                 .order_by(Tweet.content)
-                 .dicts())
-        result = list(query)
-        self.assertEqual(result, [
-            {'content': 'meow', 'username': 'huey'},
-            {'content': 'purr', 'username': 'huey'}])
-
-    def test_model_tuples_with_join(self):
-        query = (Tweet
-                 .select(Tweet.content, User.username)
-                 .join(User)
-                 .order_by(Tweet.content)
-                 .tuples())
-        result = list(query)
-        self.assertEqual(result, [('meow', 'huey'), ('purr', 'huey')])
+    def test_count_clear_limit(self):
+        for i in range(5):
+            QUser.insert({QUser.username: 'u%d' % i}).execute()
+        query = QUser.select().limit(2).offset(1)
+        # Normal count respects limit.
+        self.assertEqual(query.count(), 2)
+        # clear_limit ignores it.
+        self.assertEqual(query.count(clear_limit=True), 5)
 
 
 # ===========================================================================
-# Model-level get/peek/first edge cases
+# CursorWrapper column dedupe helpers
 # ===========================================================================
 
-class TestModelGetEdgeCases(ModelTestCase):
-    database = get_in_memory_db()
-    requires = [User]
-
-    def test_get_does_not_exist(self):
-        self.assertRaises(
-            User.DoesNotExist,
-            User.get, User.username == 'nobody')
-
-    def test_get_or_none_missing(self):
-        result = User.get_or_none(User.username == 'nobody')
-        self.assertIsNone(result)
-
-    def test_peek_empty_model(self):
-        query = User.select().where(User.username == 'nobody')
-        self.assertIsNone(query.peek(n=1))
-
-    def test_first_empty_model(self):
-        query = User.select().where(User.username == 'nobody')
-        self.assertIsNone(query.first())
-
-    def test_scalar_model(self):
-        for u in ('huey', 'mickey', 'zaizee'):
-            User.create(username=u)
-        count = User.select(fn.COUNT(User.id)).scalar()
-        self.assertEqual(count, 3)
-
-    def test_exists_model(self):
-        User.create(username='huey')
-        self.assertTrue(User.select().where(User.username == 'huey').exists())
-        self.assertFalse(User.select().where(User.username == 'x').exists())
-
-
-# ===========================================================================
-# Query .sql() method and CursorWrapper utilities
-# ===========================================================================
-
-class TestQuerySqlMethod(ModelTestCase):
-    database = get_in_memory_db()
-    requires = [User]
-
-    def test_sql_returns_tuple(self):
-        query = User.select().where(User.username == 'huey')
-        sql, params = query.sql()
-        self.assertIn('SELECT', sql)
-        self.assertIn('"users"', sql)
-        self.assertEqual(params, ['huey'])
-
-    def test_sql_insert(self):
-        query = User.insert(username='huey')
-        sql, params = query.sql()
-        self.assertIn('INSERT', sql)
-        self.assertEqual(params, ['huey'])
-
-    def test_sql_update(self):
-        query = User.update({User.username: 'zaizee'}).where(User.id == 1)
-        sql, params = query.sql()
-        self.assertIn('UPDATE', sql)
-        self.assertEqual(params, ['zaizee', 1])
-
-    def test_sql_delete(self):
-        query = User.delete().where(User.id == 1)
-        sql, params = query.sql()
-        self.assertIn('DELETE', sql)
-        self.assertEqual(params, [1])
-
-
-class TestDedupeColumns(DatabaseTestCase):
-    database = get_in_memory_db()
-
+class TestDedupeColumns(BaseTestCase):
     def test_dedupe_columns(self):
         from peers import CursorWrapper
         cw = CursorWrapper.__new__(CursorWrapper)
@@ -790,82 +667,3 @@ class TestDedupeColumns(DatabaseTestCase):
             ['name', 'value', 'name'], valid_identifiers=False)
         self.assertEqual(result, ['name', 'value', 'name_2'])
 
-
-# ===========================================================================
-# CursorWrapper edge cases
-# ===========================================================================
-
-class TestCursorWrapperEdgeCases(DatabaseTestCase):
-    database = get_in_memory_db()
-
-    def setUp(self):
-        super(TestCursorWrapperEdgeCases, self).setUp()
-        QUser.bind(self.database)
-        self.execute('CREATE TABLE "users" (id INTEGER NOT NULL PRIMARY KEY, '
-                     'username TEXT)')
-
-    def tearDown(self):
-        self.execute('DROP TABLE "users";')
-        super(TestCursorWrapperEdgeCases, self).tearDown()
-
-    def test_getitem_invalid_type_error(self):
-        from peers import CursorWrapper
-        QUser.insert({QUser.username: 'u1'}).execute()
-        query = QUser.select()
-        cursor = query.execute()
-        self.assertRaises(ValueError, cursor.__getitem__, 'bad')
-
-    def test_fill_cache_negative_error(self):
-        from peers import CursorWrapper
-        QUser.insert({QUser.username: 'u1'}).execute()
-        query = QUser.select()
-        cursor = query.execute()
-        self.assertRaises(ValueError, cursor.fill_cache, -1)
-
-    def test_peek_n_greater_than_one(self):
-        for i in range(5):
-            QUser.insert({QUser.username: 'u%d' % i}).execute()
-        query = QUser.select().order_by(QUser.id)
-        rows = query.peek(n=3)
-        self.assertEqual(len(rows), 3)
-        self.assertEqual([r['username'] for r in rows],
-                         ['u0', 'u1', 'u2'])
-
-    def test_count_clear_limit(self):
-        for i in range(5):
-            QUser.insert({QUser.username: 'u%d' % i}).execute()
-        query = QUser.select().limit(2).offset(1)
-        # Normal count respects limit.
-        self.assertEqual(query.count(), 2)
-        # clear_limit ignores it.
-        self.assertEqual(query.count(clear_limit=True), 5)
-
-
-class TestModelCursorEdgeCases(ModelTestCase):
-    database = get_in_memory_db()
-    requires = [User, Tweet]
-
-    def test_peek_n_model(self):
-        for name in ('alpha', 'bravo', 'charlie'):
-            User.create(username=name)
-        query = User.select().order_by(User.username)
-        rows = query.peek(n=2)
-        self.assertEqual(len(rows), 2)
-        self.assertEqual(rows[0].username, 'alpha')
-        self.assertEqual(rows[1].username, 'bravo')
-
-    def test_model_namedtuple_with_join(self):
-        u = User.create(username='huey')
-        Tweet.create(user=u, content='meow')
-        query = (Tweet
-                 .select(Tweet.content, User.username)
-                 .join(User)
-                 .namedtuples())
-        rows = list(query)
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].content, 'meow')
-        self.assertEqual(rows[0].username, 'huey')
-
-    def test_model_raw_get_does_not_exist(self):
-        query = User.raw('SELECT * FROM users WHERE username = ?', 'nobody')
-        self.assertRaises(User.DoesNotExist, query.get)

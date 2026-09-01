@@ -13,13 +13,14 @@ from playhouse.pool import *
 from .base import BACKEND
 from .base import BaseTestCase
 from .base import IS_CRDB
+from .base import IS_CRDB_NESTED_TX
 from .base import IS_MYSQL
 from .base import IS_POSTGRESQL
-from .base import IS_SQLITE
 from .base import ModelTestCase
 from .base import db_loader
 from .base import requires_mysql
 from .base import requires_postgresql
+from .base import skip_if
 from .base import skip_unless
 from .base_models import Register
 
@@ -60,10 +61,6 @@ class FakePooledDatabase(PooledDatabase, FakeDatabase):
     def __init__(self, *args, **kwargs):
         super(FakePooledDatabase, self).__init__(*args, **kwargs)
         self.conn_key = lambda conn: conn
-
-
-class PooledTestDatabase(PooledDatabase, SqliteDatabase):
-    pass
 
 
 def push_conn(db, timestamp, conn):
@@ -189,7 +186,6 @@ class TestPooledDatabase(BaseTestCase):
     def test_close_idle(self):
         db = FakePooledDatabase('testing', counter=3)
 
-        now = time.time()
         now = time.time()
         push_conn(db, now - 10, 3)
         push_conn(db, now - 5, 2)
@@ -662,12 +658,11 @@ class TestPooledDatabase(BaseTestCase):
                         action_name)
 
     def test_manual_close_does_not_hold_pool_lock(self):
-        # Regression: manual_close used to be @locked, meaning it held the
-        # pool lock across the call to self.close(). self.close() acquires
-        # the database lock; meanwhile Database.connect() in another thread
-        # acquires those locks in the opposite order (database lock first,
-        # then pool lock via the @locked _connect), so the two would
-        # deadlock.
+        # Regression: manual_close used to be @locked, meaning it held the pool
+        # lock across the call to self.close(), which acquires the database
+        # lock. Meanwhile Database.connect() in another thread
+        # acquires those locks in the opposite order (database lock first, then
+        # pool lock via the @locked _connect), so the two would deadlock.
         self._assert_no_pool_lock_during_close(
             'manual_close', lambda db: db.manual_close())
 
@@ -746,55 +741,6 @@ class TestPooledDatabase(BaseTestCase):
         self.assertEqual(db._wait_timeout, float('inf'))
 
 
-class TestLivePooledDatabase(ModelTestCase):
-    database = PooledTestDatabase('test_pooled.db')
-    requires = [Register]
-
-    def tearDown(self):
-        super(TestLivePooledDatabase, self).tearDown()
-        self.database.close_idle()
-        if os.path.exists('test_pooled.db'):
-            os.unlink('test_pooled.db')
-
-    def test_reuse_connection(self):
-        for i in range(5):
-            Register.create(value=i)
-        conn_id = id(self.database.connection())
-        self.database.close()
-
-        for i in range(5, 10):
-            Register.create(value=i)
-        self.assertEqual(id(self.database.connection()), conn_id)
-        self.assertEqual(
-            [x.value for x in Register.select().order_by(Register.id)],
-            list(range(10)))
-
-    def test_db_context(self):
-        with self.database:
-            Register.create(value=1)
-            with self.database.atomic() as sp:
-                self.assertTrue(isinstance(sp, _savepoint))
-                Register.create(value=2)
-                sp.rollback()
-
-            with self.database.atomic() as sp:
-                self.assertTrue(isinstance(sp, _savepoint))
-                Register.create(value=3)
-
-        with self.database:
-            values = [r.value for r in Register.select().order_by(Register.id)]
-            self.assertEqual(values, [1, 3])
-
-    def test_bad_connection(self):
-        self.database.connection()
-        try:
-            self.database.execute_sql('select 1/0')
-        except Exception as exc:
-            pass
-        self.database.close()
-        self.database.connect()
-
-
 class TestPooledDatabaseIntegration(ModelTestCase):
     requires = [Register]
 
@@ -812,12 +758,47 @@ class TestPooledDatabaseIntegration(ModelTestCase):
         self.database = db_loader(BACKEND, db_class=db_class, **params)
         super(TestPooledDatabaseIntegration, self).setUp()
 
+    def tearDown(self):
+        super(TestPooledDatabaseIntegration, self).tearDown()
+        self.database.close_idle()
+
     def assertConnections(self, expected):
         available = len(self.database._connections)
         in_use = len(self.database._in_use)
         self.assertEqual(available + in_use, expected,
                          'expected %s, got: %s available, %s in use'
                          % (expected, available, in_use))
+
+    def test_reuse_connection(self):
+        for i in range(5):
+            Register.create(value=i)
+        conn_id = id(self.database.connection())
+        self.database.close()
+
+        for i in range(5, 10):
+            Register.create(value=i)
+        self.assertEqual(id(self.database.connection()), conn_id)
+        self.assertEqual(
+            [x.value for x in Register.select().order_by(Register.id)],
+            list(range(10)))
+
+    @skip_if(IS_CRDB and not IS_CRDB_NESTED_TX,
+             'nested transaction support is required')
+    def test_db_context(self):
+        with self.database:
+            Register.create(value=1)
+            with self.database.atomic() as sp:
+                self.assertTrue(isinstance(sp, _savepoint))
+                Register.create(value=2)
+                sp.rollback()
+
+            with self.database.atomic() as sp:
+                self.assertTrue(isinstance(sp, _savepoint))
+                Register.create(value=3)
+
+        with self.database:
+            values = [r.value for r in Register.select().order_by(Register.id)]
+            self.assertEqual(values, [1, 3])
 
     @skip_unless(hasattr(os, 'fork'), 'requires fork')
     def test_dispose_after_fork(self):

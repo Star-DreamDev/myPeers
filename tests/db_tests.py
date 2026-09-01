@@ -1,19 +1,9 @@
 """
 Database connection, pragmas, introspection, threading, and utility tests.
-
-Test case ordering:
-
-* Core database features (connection, context settings)
-* Session helper and context manager usage.
-* Introspection
-* Thread-safety
-* Deferred db / proxy
-* SQLite-specific (pragma, isolation, attach)
-* Exception wrappers
-* Utilities
 """
 from itertools import permutations
 from queue import Queue
+from unittest import mock
 import gc
 import os
 import platform
@@ -25,22 +15,20 @@ import warnings
 from peers import *
 from peers import Database
 from peers import FIELD
-from peers import Function
 from peers import attrdict
 from peers import sort_models
 
-from playhouse.shortcuts import ThreadSafeDatabaseMetadata
 
 from .base import BaseTestCase
 from .base import DatabaseTestCase
 from .base import IS_CRDB
 from .base import IS_MYSQL
-from .base import IS_MYSQL_ADVANCED_FEATURES
 from .base import IS_ORACLE_MYSQL
 from .base import IS_POSTGRESQL
 from .base import IS_SQLITE
 from .base import ModelTestCase
 from .base import skip_unless
+from .base import HAS_WINDOW_FUNCTION
 from .base import TestModel
 from .base import db
 from .base import get_in_memory_db
@@ -51,7 +39,6 @@ from .base import requires_mysql
 from .base import requires_postgresql
 from .base import requires_sqlite
 from .base import skip_if
-from .base import slow_test
 from .base_models import Category
 from .base_models import Person
 from .base_models import Tweet
@@ -116,6 +103,25 @@ class TestDatabase(DatabaseTestCase):
             self.assertFalse(self.database.is_closed())
 
         # Closed after exit.
+        self.assertTrue(self.database.is_closed())
+
+    def test_db_context_manager_nesting(self):
+        self.database.close()
+        self.assertTrue(self.database.is_closed())
+
+        with self.database:
+            self.assertFalse(self.database.is_closed())
+            self.assertEqual(self.database.transaction_depth(), 1)
+            with self.database:
+                self.assertFalse(self.database.is_closed())
+                # Inner atomic becomes savepoint (doesn't increase txn depth)
+                # but the ctx stack grows.
+                self.assertEqual(len(self.database._state.ctx), 2)
+
+            # Inner exited but outer still open.
+            self.assertFalse(self.database.is_closed())
+            self.assertEqual(len(self.database._state.ctx), 1)
+
         self.assertTrue(self.database.is_closed())
 
     def test_context_managers(self):
@@ -186,6 +192,15 @@ class TestDatabase(DatabaseTestCase):
             'SELECT val FROM register ORDER BY val')
         self.assertEqual(list(cursor.fetchall()), [(1337,), (31337,)])
         self.database.execute_sql('DROP TABLE register')
+
+    @requires_models(User)
+    def test_execute_query(self):
+        for username in ('huey', 'zaizee'):
+            User.create(username=username)
+
+        query = User.select().order_by(User.username.desc())
+        cursor = self.database.execute(query)
+        self.assertEqual([row[1] for row in cursor], ['zaizee', 'huey'])
 
     def test_bind_helpers(self):
         db = get_in_memory_db()
@@ -316,6 +331,28 @@ class TestDatabase(DatabaseTestCase):
         assertBatches(12, 12, 1)
         assertBatches(12, 13, 1)
 
+    @requires_models(User)
+    def test_batch_commit_calls(self):
+        commit_method = self.database.commit
+
+        def assertBatch(n_rows, batch_size, n_commits):
+            User.delete().execute()
+            user_data = [{'username': 'u%s' % i} for i in range(n_rows)]
+            with mock.patch.object(self.database, 'commit') as mock_commit:
+                mock_commit.side_effect = commit_method
+                for row in self.database.batch_commit(user_data, batch_size):
+                    User.create(**row)
+
+                self.assertEqual(mock_commit.call_count, n_commits)
+                self.assertEqual(User.select().count(), n_rows)
+
+        assertBatch(6, 1, 6)
+        assertBatch(6, 2, 3)
+        assertBatch(6, 3, 2)
+        assertBatch(6, 4, 2)
+        assertBatch(6, 6, 1)
+        assertBatch(6, 7, 1)
+
     def test_server_version(self):
         class FakeDatabase(Database):
             server_version = None
@@ -345,8 +382,34 @@ class TestDatabase(DatabaseTestCase):
             db.execute_sql('pragma cache_size')
         self.assertRaises(InterfaceError, db.cursor)
 
+    @skip_if(IS_CRDB, 'atomic() connects to read the server version')
+    def test_begin_autoconnect_false(self):
+        db = new_connection(autoconnect=False)
+        with self.assertRaises(InterfaceError):
+            with db.atomic():
+                pass
+        self.assertTrue(db.is_closed())
+        db.connect()
+        with db.atomic():
+            pass
+        db.close()
+
+    def test_connection_context_as_decorator(self):
+        db2 = new_connection()
+
+        @db2.connection_context()
+        def do_work():
+            self.assertFalse(db2.is_closed())
+            return db2.execute_sql('SELECT 1').fetchone()
+
+        self.assertTrue(db2.is_closed())
+        result = do_work()
+        self.assertEqual(result, (1,))
+        self.assertTrue(db2.is_closed())
+
 
 class TestQueryHooks(ModelTestCase):
+    # event.sql text and the error class both differ per backend.
     database = get_in_memory_db()
     requires = [User]
 
@@ -362,7 +425,8 @@ class TestQueryHooks(ModelTestCase):
     def test_query_hooks(self):
         User.create(username='u1')
         event = self.events[-1]
-        self.assertTrue('INSERT' in event.sql)
+        self.assertEqual(event.sql,
+                         'INSERT INTO "users" ("username") VALUES (?)')
         self.assertEqual(event.params, ['u1'])
         self.assertTrue(event.duration >= 0.)
         self.assertIsNone(event.exception)
@@ -370,7 +434,10 @@ class TestQueryHooks(ModelTestCase):
         n = len(self.events)
         self.assertEqual(User.select().count(), 1)
         self.assertEqual(len(self.events), n + 1)
-        self.assertTrue(self.events[-1].sql.startswith('SELECT'))
+        self.assertEqual(self.events[-1].sql, (
+            'SELECT COUNT(1) FROM '
+            '(SELECT 1 FROM "users" AS "t1") AS "_wrapped" LIMIT ?'))
+        self.assertEqual(self.events[-1].params, [1])
 
     def test_query_hooks_transaction(self):
         # BEGIN / COMMIT are not queries and do not reach the hooks.
@@ -382,7 +449,7 @@ class TestQueryHooks(ModelTestCase):
         with self.assertRaises(OperationalError):
             self.database.execute_sql('select * from missing_tbl')
         event = self.events[-1]
-        self.assertTrue('missing_tbl' in event.sql)
+        self.assertEqual(event.sql, 'select * from missing_tbl')
         self.assertIsInstance(event.exception, OperationalError)
 
     def test_query_hooks_propagate_errors(self):
@@ -456,62 +523,6 @@ class TestDatabaseConnection(DatabaseTestCase):
         curs = self.database.execute_sql('select data from foo order by data')
         self.assertEqual([row[0] for row in curs], ['c', 'p'])
         self.database.execute_sql('drop table foo')
-
-
-class TestSessionTransactions(DatabaseTestCase):
-    def test_session(self):
-        # When session is not active, commit and rollback have no effect.
-        self.assertFalse(self.database.in_transaction())
-        self.assertFalse(self.database.session_commit())
-        self.assertFalse(self.database.session_rollback())
-
-        tx = self.database.session_start()
-        self.assertTrue(self.database.in_transaction())
-        self.assertEqual(self.database.transaction_depth(), 1)
-
-        tx2 = self.database.session_start()
-        self.assertTrue(self.database.in_transaction())
-        self.assertEqual(self.database.transaction_depth(), 2)
-
-        self.assertTrue(self.database.top_transaction() is tx2)
-        self.assertTrue(self.database.session_commit())
-        self.assertTrue(self.database.top_transaction() is tx)
-        self.assertTrue(self.database.in_transaction())
-        self.assertEqual(self.database.transaction_depth(), 1)
-
-        self.assertTrue(self.database.session_rollback())
-        self.assertEqual(self.database.transaction_depth(), 0)
-
-    def test_db_context_manager_nesting(self):
-        self.database.close()
-        self.assertTrue(self.database.is_closed())
-
-        with self.database:
-            self.assertFalse(self.database.is_closed())
-            self.assertEqual(self.database.transaction_depth(), 1)
-            with self.database:
-                self.assertFalse(self.database.is_closed())
-                # Inner atomic becomes savepoint (doesn't increase txn depth)
-                # but the ctx stack grows.
-                self.assertEqual(len(self.database._state.ctx), 2)
-
-            # Inner exited but outer still open.
-            self.assertFalse(self.database.is_closed())
-            self.assertEqual(len(self.database._state.ctx), 1)
-
-        self.assertTrue(self.database.is_closed())
-
-    def test_init_closes_open_connection(self):
-        db = get_in_memory_db()
-        db.connect()
-        self.assertFalse(db.is_closed())
-        db.init(':memory:')
-        self.assertTrue(db.is_closed())
-
-        # Can reconnect after re-init.
-        db.connect()
-        self.assertFalse(db.is_closed())
-        db.close()
 
 
 # ===========================================================================
@@ -660,8 +671,8 @@ class TestIntrospection(ModelTestCase):
         def normalize_view_meta(view_meta):
             sql_ws_norm = re.sub(r'[\n\s]+', ' ', view_meta.sql.strip('; '))
             if IS_ORACLE_MYSQL:
-                # MySQL 8 parenthesizes the where clause when it rewrites
-                # the view sql; MariaDB does not.
+                # MySQL 8 parenthesizes the where clause when it rewrites the
+                # view sql. MariaDB does not.
                 sql_ws_norm = sql_ws_norm.replace('(', '').replace(')', '')
             return view_meta.name, (sql_ws_norm
                                     .replace('`peers_test`.', '')
@@ -777,8 +788,11 @@ class TestIntrospection(ModelTestCase):
         self.assertIsNone(cols['name'].default)
         self.assertIsNone(cols['notes'].default)
         created = cols['created'].default
-        # MariaDB reports current_timestamp(), others CURRENT_TIMESTAMP.
-        self.assertTrue(created.lower().startswith('current_timestamp'))
+        if IS_SQLITE:
+            self.assertEqual(created, 'CURRENT_TIMESTAMP')
+        else:
+            # MariaDB reports current_timestamp(), pg CURRENT_TIMESTAMP.
+            self.assertTrue(created.lower().startswith('current_timestamp'))
 
     @skip_if(IS_CRDB, 'crdb reflection extensions verified separately')
     @requires_models(FKParent, FKChild)
@@ -807,9 +821,14 @@ class TestIntrospection(ModelTestCase):
         indexes = {i.name: i
                    for i in self.database.get_indexes('unique_model')}
         idx = indexes['unique_model_name']
-        if IS_MYSQL:
+        if IS_SQLITE:
+            self.assertEqual(idx.sql, (
+                'CREATE UNIQUE INDEX "unique_model_name" '
+                'ON "unique_model" ("name")'))
+        elif IS_MYSQL:
             self.assertIsNone(idx.sql)
         else:
+            # Pg DDL is schema-qualified with USING btree, crdb differs again.
             self.assertTrue('unique_model' in idx.sql.lower())
 
     @requires_mysql
@@ -934,12 +953,16 @@ class TestThreadSafety(ModelTestCase):
         self.assertEqual(data.qsize(), self.nrows * self.nthreads)
 
     def test_mt_general(self):
+        errors = []
         def connect_close():
-            for _ in range(self.nrows):
-                self.database.connect()
-                with self.database.atomic() as txn:
-                    self.database.execute_sql('select 1').fetchone()
-                self.database.close()
+            try:
+                for _ in range(self.nrows):
+                    self.database.connect()
+                    with self.database.atomic() as txn:
+                        self.database.execute_sql('select 1').fetchone()
+                    self.database.close()
+            except Exception as exc:
+                errors.append(exc)
 
         threads = []
         for i in range(self.nthreads):
@@ -947,59 +970,26 @@ class TestThreadSafety(ModelTestCase):
 
         for t in threads: t.start()
         for t in threads: t.join()
+        self.assertEqual(errors, [])
 
     def test_thread_safety_atomic(self):
         @self.database.atomic()
         def get_one(n):
             time.sleep(n)
             return User.select().first()
+        errors = []
         def run(n):
-            with self.database.atomic():
-                self.assertEqual(get_one(n).username, 'u')
+            try:
+                with self.database.atomic():
+                    self.assertEqual(get_one(n).username, 'u')
+            except Exception as exc:
+                errors.append(exc)
         User.create(username='u')
         threads = [threading.Thread(target=run, args=(i,))
                    for i in (0.01, 0.03, 0.05, 0.07, 0.09, 0.02, 0.04, 0.06)]
         for t in threads: t.start()
         for t in threads: t.join()
-
-
-class TestThreadSafeMetaRegression(ModelTestCase):
-    def test_thread_safe_meta(self):
-        d1 = get_in_memory_db()
-        d2 = get_in_memory_db()
-
-        class Meta:
-            database = d1
-            model_metadata_class = ThreadSafeDatabaseMetadata
-        attrs = {'Meta': Meta}
-        for i in range(1, 30):
-            attrs['f%d' % i] = IntegerField()
-        M = type('M', (TestModel,), attrs)
-
-        sql = ('SELECT "t1"."f1", "t1"."f2", "t1"."f3", "t1"."f4" '
-               'FROM "m" AS "t1"')
-        query = M.select(M.f1, M.f2, M.f3, M.f4)
-
-        def swap_db():
-            for i in range(100):
-                self.assertEqual(M._meta.database, d1)
-                self.assertSQL(query, sql)
-                with d2.bind_ctx([M]):
-                    self.assertEqual(M._meta.database, d2)
-                    self.assertSQL(query, sql)
-                self.assertEqual(M._meta.database, d1)
-                self.assertSQL(query, sql)
-
-        # From a separate thread, swap the database and verify it works
-        # correctly.
-        threads = [threading.Thread(target=swap_db)
-                   for i in range(10)]
-        for t in threads: t.start()
-        for t in threads: t.join()
-
-        # In the main thread the original database has not been altered.
-        self.assertEqual(M._meta.database, d1)
-        self.assertSQL(query, sql)
+        self.assertEqual(errors, [])
 
 
 # ===========================================================================
@@ -1032,6 +1022,18 @@ class TestDeferredDatabase(BaseTestCase):
 
         # The connection was automatically closed.
         self.assertTrue(deferred_db.is_closed())
+
+    def test_init_closes_open_connection(self):
+        db = get_in_memory_db()
+        db.connect()
+        self.assertFalse(db.is_closed())
+        db.init(':memory:')
+        self.assertTrue(db.is_closed())
+
+        # Can reconnect after re-init.
+        db.connect()
+        self.assertFalse(db.is_closed())
+        db.close()
 
 
 class TestDBProxy(BaseTestCase):
@@ -1170,7 +1172,7 @@ class TestSchemaNamespace(ModelTestCase):
 
 
 # ===========================================================================
-# SQLite pragmas, isolation, introspection, and ATTACH
+# SQLite pragmas, isolation, ATTACH, and user-defined callbacks
 # ===========================================================================
 
 class TestSqliteDatabaseFeatures(DatabaseTestCase):
@@ -1310,6 +1312,7 @@ class Data(TestModel):
 
 
 class TestAttachDatabase(ModelTestCase):
+    # ATTACH is sqlite-only.
     database = get_sqlite_db()
     requires = [Data]
 
@@ -1409,12 +1412,272 @@ class TestAttachDatabase(ModelTestCase):
         self.assertEqual(tables, ['cache_data'])
 
 
+class WeightedAverage(object):
+    def __init__(self):
+        self.total = 0.
+        self.count = 0.
+
+    def step(self, value, weight=None):
+        weight = weight or 1.
+        self.total += weight
+        self.count += (weight * value)
+
+    def finalize(self):
+        if self.total != 0.:
+            return self.count / self.total
+        return 0.
+
+class RunningTotal(object):
+    def __init__(self):
+        self.total = 0.
+
+    def step(self, value):
+        self.total += value
+
+    def inverse(self, value):
+        self.total -= value
+
+    def value(self):
+        return self.total
+
+    def finalize(self):
+        return self.total
+
+
+def _cmp(l, r):
+    if l < r:
+        return -1
+    return 1 if r < l else 0
+
+def collate_reverse(s1, s2):
+    return -_cmp(s1, s2)
+
+callback_db = get_in_memory_db()
+
+@callback_db.collation()
+def collate_case_insensitive(s1, s2):
+    return _cmp(s1.lower(), s2.lower())
+
+def title_case(s): return s.title()
+
+@callback_db.func()
+def rstrip(s, n):
+    return s.rstrip(n)
+
+callback_db.register_aggregate(WeightedAverage, 'weighted_avg', 1)
+callback_db.register_aggregate(WeightedAverage, 'weighted_avg2', 2)
+callback_db.register_collation(collate_reverse)
+callback_db.register_function(title_case)
+
+
+class Post(TestModel):
+    message = TextField()
+
+class Values(TestModel):
+    klass = IntegerField()
+    value = FloatField()
+    weight = FloatField()
+
+
+class TestUserDefinedCallbacks(ModelTestCase):
+    database = callback_db
+    requires = [Post, Values]
+
+    def test_custom_agg(self):
+        data = (
+            (1, 3.4, 1.0),
+            (1, 6.4, 2.3),
+            (1, 4.3, 0.9),
+            (2, 3.4, 1.4),
+            (3, 2.7, 1.1),
+            (3, 2.5, 1.1),
+        )
+        for klass, value, wt in data:
+            Values.create(klass=klass, value=value, weight=wt)
+
+        vq = (Values
+              .select(
+                  Values.klass,
+                  fn.weighted_avg(Values.value).alias('wtavg'),
+                  fn.avg(Values.value).alias('avg'))
+              .group_by(Values.klass))
+        q_data = [(v.klass, v.wtavg, v.avg) for v in vq]
+        self.assertEqual(q_data, [
+            (1, 4.7, 4.7),
+            (2, 3.4, 3.4),
+            (3, 2.6, 2.6)])
+
+        vq = (Values
+              .select(
+                  Values.klass,
+                  fn.weighted_avg2(Values.value, Values.weight).alias('wtavg'),
+                  fn.avg(Values.value).alias('avg'))
+              .group_by(Values.klass))
+        q_data = [(v.klass, str(v.wtavg)[:4], v.avg) for v in vq]
+        self.assertEqual(q_data, [
+            (1, '5.23', 4.7),
+            (2, '3.4', 3.4),
+            (3, '2.6', 2.6)])
+
+    def test_custom_collation(self):
+        for i in [1, 4, 3, 5, 2]:
+            Post.create(message='p%d' % i)
+
+        pq = Post.select().order_by(Post.message.collate('collate_reverse'))
+        self.assertEqual([p.message for p in pq],
+                         ['p5', 'p4', 'p3', 'p2', 'p1'])
+
+        pq = Post.select().order_by(
+            Post.message.asc(collation='collate_reverse'))
+        self.assertEqual([p.message for p in pq],
+                         ['p5', 'p4', 'p3', 'p2', 'p1'])
+
+        pq = Post.select().order_by(
+            Post.message.desc(collation='collate_reverse'))
+        self.assertEqual([p.message for p in pq],
+                         ['p1', 'p2', 'p3', 'p4', 'p5'])
+
+    def test_collation_decorator(self):
+        posts = [Post.create(message=m)
+                 for m in ['aaa', 'Aab', 'ccc', 'Bba', 'BbB']]
+        exprs = (
+            Post.message.collate('collate_case_insensitive'),
+            Post.message.asc(collation='collate_case_insensitive'))
+        for expr in exprs:
+            pq = Post.select().order_by(expr)
+            self.assertEqual([p.message for p in pq], [
+                'aaa',
+                'Aab',
+                'Bba',
+                'BbB',
+                'ccc'])
+
+    def test_custom_function(self):
+        p1 = Post.create(message='this is a test')
+        p2 = Post.create(message='another TEST')
+
+        sq = Post.select().where(
+            fn.title_case(Post.message) == 'This Is A Test')
+        self.assertEqual(list(sq), [p1])
+
+        sq = Post.select(fn.title_case(Post.message)).tuples()
+        self.assertEqual([x[0] for x in sq], [
+            'This Is A Test',
+            'Another Test',
+        ])
+
+    def test_function_decorator(self):
+        [Post.create(message=m) for m in ['testing', 'chatting  ', '  foo']]
+        pq = Post.select(fn.rstrip(Post.message, 'ing')).order_by(Post.id)
+        self.assertEqual([x[0] for x in pq.tuples()], [
+            'test', 'chatting  ', '  foo'])
+
+        pq = Post.select(fn.rstrip(Post.message, ' ')).order_by(Post.id)
+        self.assertEqual([x[0] for x in pq.tuples()], [
+            'testing', 'chatting', '  foo'])
+
+    @skip_unless(HAS_WINDOW_FUNCTION)
+    def test_custom_window_function(self):
+        # Registering against a live connection applies to it immediately.
+        self.database.register_window_function(RunningTotal, 'running_total',
+                                               1)
+        for value in (1., 2., 3., 4.):
+            Values.create(klass=1, value=value, weight=1.)
+
+        vq = (Values
+              .select(Values.value,
+                      fn.running_total(Values.value)
+                      .over(order_by=[Values.id])
+                      .alias('rt'))
+              .order_by(Values.id))
+        self.assertEqual([(v.value, v.rt) for v in vq],
+                         [(1., 1.), (2., 3.), (3., 6.), (4., 10.)])
+        self.database.unregister_window_function('running_total')
+
+    @skip_unless(HAS_WINDOW_FUNCTION)
+    def test_window_function_decorator(self):
+        db = get_in_memory_db()
+
+        @db.window_function('wsum')
+        class WSum(RunningTotal):
+            pass
+
+        sql = ('select wsum(c) over (order by c) from '
+               '(select 1 as c union all select 2)')
+        db.connect()
+        self.assertEqual(db.execute_sql(sql).fetchall(), [(1.,), (3.,)])
+
+        # Unregistering takes effect on the next connection.
+        db.unregister_window_function('wsum')
+        self.assertEqual(db.execute_sql(sql).fetchall(), [(1.,), (3.,)])
+        db.close()
+        db.connect()
+        self.assertRaises(OperationalError, db.execute_sql, sql)
+        db.close()
+
+    def test_use_across_connections(self):
+        db = get_in_memory_db()
+        @db.func()
+        def rev(s):
+            return s[::-1]
+
+        db.connect(); db.close(); db.connect()
+        curs = db.execute_sql('select rev(?)', ('hello',))
+        self.assertEqual(curs.fetchone(), ('olleh',))
+
+
+class TestReadOnly(ModelTestCase):
+    # uri mode=ro is sqlite-only.
+    database = get_sqlite_db()
+
+    @requires_models(User)
+    def test_read_only(self):
+        User.create(username='foo')
+
+        db_filename = self.database.database
+        db = SqliteDatabase('file:%s?mode=ro' % db_filename, uri=True)
+        cursor = db.execute_sql('select username from users')
+        self.assertEqual(cursor.fetchone(), ('foo',))
+
+        self.assertRaises(OperationalError, db.execute_sql,
+                          'insert into users (username) values (?)', ('huey',))
+
+        # We cannot create a database if in read-only mode.
+        db = SqliteDatabase('file:xx_not_exists.db?mode=ro', uri=True)
+        self.assertRaises(OperationalError, db.connect)
+
+
+class TestDeterministicFunction(ModelTestCase):
+    # register_function(deterministic=True) is sqlite-only.
+    database = get_in_memory_db()
+
+    def test_deterministic(self):
+        db = self.database
+        @db.func(deterministic=True)
+        def pylower(s):
+            if s is not None:
+                return s.lower()
+
+        class Reg(db.Model):
+            key = TextField()
+            class Meta:
+                indexes = [
+                    SQL('create unique index "reg_pylower_key" '
+                        'on "reg" (pylower("key"))')]
+
+        db.drop_tables([Reg])
+        db.create_tables([Reg])
+        Reg.create(key='k1')
+        with self.assertRaises(IntegrityError):
+            with db.atomic():
+                Reg.create(key='K1')
+
+
 # ===========================================================================
 # Exception handling and utilities
 # ===========================================================================
 
 class TestExceptionWrapper(ModelTestCase):
-    database = get_in_memory_db()
     requires = [User]
 
     def test_exception_wrapper(self):
@@ -1495,6 +1758,14 @@ class TestSortModels(BaseTestCase):
         ])
         for list_of_models in permutations(M):
             self.assertEqual(sort_models(list_of_models), sorted_models)
+
+    def test_deferred_fk_dependency_graph(self):
+        class AUser(TestModel):
+            foo = DeferredForeignKey('Tweet')
+        class ZTweet(TestModel):
+            user = ForeignKeyField(AUser, backref='ztweets')
+
+        self.assertEqual(sort_models([AUser, ZTweet]), [AUser, ZTweet])
 
 
 class TestChunkedUtility(BaseTestCase):
@@ -1609,7 +1880,7 @@ class TestUtilityFunctions(BaseTestCase):
         self.assertEqual(_query_val_transform(d), "'2023-01-15'")
         b = b'hello'
         result = _query_val_transform(b)
-        self.assertIn('hello', result)
+        self.assertEqual(result, "'hello'")
 
     def test_deprecated_emits_warning(self):
         from peers import __deprecated__
@@ -1626,7 +1897,7 @@ class TestUtilityFunctions(BaseTestCase):
 # ===========================================================================
 
 class TestDatabaseSQLHelpers(BaseTestCase):
-    def test_random_sqlite(self):
+    def test_random(self):
         db = SqliteDatabase(':memory:')
         self.assertSQL(db.random(), 'random()')
 
@@ -1636,7 +1907,7 @@ class TestDatabaseSQLHelpers(BaseTestCase):
         db = PostgresqlDatabase.__new__(PostgresqlDatabase)
         self.assertSQL(db.random(), 'random()')
 
-    def test_get_noop_select_sqlite(self):
+    def test_get_noop_select(self):
         db = SqliteDatabase(':memory:')
         ctx = db.get_noop_select(Context())
         self.assertSQL(ctx, 'SELECT 0 WHERE 0')
@@ -1649,7 +1920,7 @@ class TestDatabaseSQLHelpers(BaseTestCase):
         ctx = db.get_noop_select(Context())
         self.assertSQL(ctx, 'SELECT 0 WHERE false')
 
-    def test_mysql_extract_server_version_mysql(self):
+    def test_extract_server_version(self):
         db = MySQLDatabase.__new__(MySQLDatabase)
         version = db._extract_server_version('8.0.31')
         self.assertEqual(version, (8, 0, 31))

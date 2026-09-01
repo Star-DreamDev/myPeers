@@ -44,7 +44,7 @@ class CleanUpModelTestCase(ModelTestCase):
             os.unlink(self.database.database)
 
 
-class SqlCipherTestCase(CleanUpModelTestCase):
+class TestSqlCipher(CleanUpModelTestCase):
     database = db
     requires = [Thing]
 
@@ -119,19 +119,19 @@ class TestSqlCipherConfiguration(CleanUpModelTestCase):
         self.assertTrue('foo' in self.database.get_tables())
 
 
-class SqlCipherExtTestCase(CleanUpModelTestCase):
+class TestSqlCipherExt(CleanUpModelTestCase):
     database = db
     requires = [Note]
 
     def setUp(self):
-        super(SqlCipherExtTestCase, self).setUp()
+        super(TestSqlCipherExt, self).setUp()
         FTSNote._meta.database = db
         FTSNote.drop_table(True)
         FTSNote.create_table(tokenize='porter', content=Note)
 
     def tearDown(self):
         FTSNote.drop_table(True)
-        super(SqlCipherExtTestCase, self).tearDown()
+        super(TestSqlCipherExt, self).tearDown()
 
     def test_fts(self):
         strings = [

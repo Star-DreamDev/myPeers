@@ -3,7 +3,6 @@ from playhouse.hybrid import *
 
 from .base import ModelTestCase
 from .base import TestModel
-from .base import get_in_memory_db
 from .base import requires_models
 
 
@@ -41,7 +40,6 @@ class SubPerson(Person):
 
 
 class TestHybridProperties(ModelTestCase):
-    database = get_in_memory_db()
     requires = [Interval, Person]
 
     def setUp(self):
@@ -141,7 +139,6 @@ class Item(TestModel):
 
 
 class TestHybridWithRelationship(ModelTestCase):
-    database = get_in_memory_db()
     requires = [Order, Item]
 
     def test_hybrid_with_relationship(self):

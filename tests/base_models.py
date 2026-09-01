@@ -3,21 +3,7 @@ from peers import *
 from .base import TestModel
 
 
-# ---------------------------------------------------------------------------
-# Person / Note - basic FK relationship with indexes and nullable date field.
-#
-# Person exercises: CharField fields, DateField with index and null=True,
-# compound unique index on (first, last). Used heavily in model_sql.py for
-# SELECT/INSERT/UPDATE/DELETE SQL generation, in schema.py for DDL tests,
-# and in fields.py for FK constraint tests.
-#
-# Note exercises: ForeignKeyField to Person, TextField. The simplest
-# parent-child FK pattern. Used for join SQL generation and FK constraint
-# tests.
-#
-# NOTE: db_tests.py and prefetch_tests.py define their own local Person
-# and Note models with different fields - those are intentionally separate.
-# ---------------------------------------------------------------------------
+# Basic FK pair, Person has a compound unique index on (first, last).
 
 class Person(TestModel):
     first = CharField()
@@ -35,68 +21,27 @@ class Note(TestModel):
     content = TextField()
 
 
-# ---------------------------------------------------------------------------
-# Category - self-referential FK with non-integer primary key.
-#
-# Exercises: ForeignKeyField('self'), CharField as primary_key, nullable
-# self-FK (parent=null for root nodes). This is the primary model for
-# recursive CTE tests (TestCTEIntegration) and self-referential query tests.
-# Also used in schema.py DDL tests and db_tests.py introspection tests.
-# ---------------------------------------------------------------------------
+# Self-referential FK with a CharField primary key.
 
 class Category(TestModel):
     parent = ForeignKeyField('self', backref='children', null=True)
     name = CharField(max_length=20, primary_key=True)
 
 
-# ---------------------------------------------------------------------------
-# Relationship - multiple foreign keys to the same model.
-#
-# Exercises: two ForeignKeyField columns pointing to the same model (Person),
-# with distinct backrefs. Tests multi-FK join resolution, delete cascading
-# through multiple FK paths, and subquery joins.
-# ---------------------------------------------------------------------------
+# Two FKs to the same model.
 
 class Relationship(TestModel):
     from_person = ForeignKeyField(Person, backref='relations')
     to_person = ForeignKeyField(Person, backref='related_to')
 
 
-# ---------------------------------------------------------------------------
-# Register - minimal single-field model.
-#
-# Exercises: the simplest possible model (one IntegerField). Used as the
-# workhorse for transaction tests (transactions.py) where the test logic
-# needs a trivial INSERT/SELECT cycle without FK complexity. Also used
-# in compound SELECT tests (UNION of Register values).
-# ---------------------------------------------------------------------------
+# Minimal single-field model for transaction and compound-select tests.
 
 class Register(TestModel):
     value = IntegerField()
 
 
-# ---------------------------------------------------------------------------
-# User / Account / Tweet / Favorite - social media graph.
-#
-# This is the most heavily used model group in the test suite (~66 TestCase
-# classes reference User). It provides the canonical "has-many" and
-# "many-to-many-like" patterns.
-#
-# User exercises: CharField, explicit table_name override ('users'). The
-# explicit table_name is important - many SQL assertions reference "users"
-# rather than the default "user" that legacy_table_names=False would produce.
-#
-# Account exercises: nullable ForeignKeyField (user is optional). Tests
-# LEFT OUTER JOIN behavior and nullable FK handling.
-#
-# Tweet exercises: ForeignKeyField to User, TextField, TimestampField.
-# The primary "child" model for join, subquery, window function, RETURNING,
-# and compound SELECT tests.
-#
-# Favorite exercises: two ForeignKeyFields (to User and Tweet) forming a
-# many-to-many join table. Tests multi-table joins, delete cascading
-# through intermediate tables, and subquery filtering.
-# ---------------------------------------------------------------------------
+# Social graph, the suite's workhorse. SQL assertions rely on table 'users'.
 
 class User(TestModel):
     username = CharField()
@@ -121,16 +66,7 @@ class Favorite(TestModel):
     tweet = ForeignKeyField(Tweet, backref='favorites')
 
 
-# ---------------------------------------------------------------------------
-# Sample / SampleMeta - numeric aggregation models.
-#
-# Sample exercises: IntegerField + FloatField with default. The primary model
-# for window function tests (partition by counter, aggregate over value),
-# function coercion tests, and numeric aggregation (AVG, SUM, COUNT).
-#
-# SampleMeta exercises: FK parent-child with FloatField default=0.0. Tests
-# default value insertion and parent-child SELECT with defaults.
-# ---------------------------------------------------------------------------
+# Numeric models for window function and aggregation tests.
 
 class Sample(TestModel):
     counter = IntegerField()
@@ -142,17 +78,7 @@ class SampleMeta(TestModel):
     value = FloatField(default=0.0)
 
 
-# ---------------------------------------------------------------------------
-# A / B / C - three-level FK chain.
-#
-# Exercises: deep join traversal (A -> B -> C) through a linear FK chain.
-# Each model has a TextField and a FK to the previous level. Used in
-# model_sql.py for multi-join SQL generation, in models.py for deep
-# join integration tests, and in schema.py for DDL ordering tests.
-#
-# NOTE: prefetch_tests.py defines its own A/B/C with different fields
-# and additional FK to an X model - those are intentionally separate.
-# ---------------------------------------------------------------------------
+# Three-level FK chain for deep join traversal.
 
 class A(TestModel):
     a = TextField()
@@ -164,15 +90,7 @@ class C(TestModel):
     c = TextField()
 
 
-# ---------------------------------------------------------------------------
-# Emp - ON CONFLICT / upsert testing with unique constraint.
-#
-# Exercises: CharField with unique=True (empno), compound unique index on
-# (first, last). This is the primary model for REPLACE and ON CONFLICT
-# tests across all database backends. The compound unique index exercises
-# multi-column conflict targets, while the single unique column (empno)
-# exercises single-column conflict targets.
-# ---------------------------------------------------------------------------
+# Single (empno) and compound (first, last) conflict targets for upserts.
 
 class Emp(TestModel):
     first = CharField()
@@ -185,14 +103,7 @@ class Emp(TestModel):
         )
 
 
-# ---------------------------------------------------------------------------
-# OCTest - ON CONFLICT with atomic update expressions.
-#
-# Exercises: unique CharField (a) with IntegerField defaults. Designed for
-# testing ON CONFLICT DO UPDATE with arithmetic expressions (e.g.,
-# SET b = b + 2). The defaults (b=0, c=0) ensure predictable starting
-# values for atomic increment tests.
-# ---------------------------------------------------------------------------
+# Unique key with integer defaults for ON CONFLICT DO UPDATE arithmetic.
 
 class OCTest(TestModel):
     a = CharField(unique=True)
@@ -200,15 +111,7 @@ class OCTest(TestModel):
     c = IntegerField(default=0)
 
 
-# ---------------------------------------------------------------------------
-# UKVP - ON CONFLICT with partial unique index.
-#
-# Exercises: partial index (unique on (key, value) WHERE extra > 1). This
-# tests the advanced PostgreSQL/SQLite pattern where ON CONFLICT must
-# include a conflict_where clause matching the partial index predicate.
-# The raw SQL index definition (rather than a tuple) exercises the
-# SQL-literal index path.
-# ---------------------------------------------------------------------------
+# ON CONFLICT against a partial unique index.
 
 class UKVP(TestModel):
     key = TextField()
@@ -223,13 +126,7 @@ class UKVP(TestModel):
                 'WHERE "extra" > 1')]
 
 
-# ---------------------------------------------------------------------------
-# KVCon - key/value with two named unique constraints.
-#
-# Exercises ON CONFLICT ON CONSTRAINT <name>, which needs a real named
-# constraint rather than the unique index that unique=True generates. Two
-# constraints let a test name one and conflict on the other.
-# ---------------------------------------------------------------------------
+# Named unique constraints for ON CONFLICT ON CONSTRAINT.
 
 class KVCon(TestModel):
     key = TextField()
@@ -241,18 +138,21 @@ class KVCon(TestModel):
             SQL('CONSTRAINT kvcon_value_uniq UNIQUE (value)')]
 
 
-# ---------------------------------------------------------------------------
-# DfltM - default value variants.
-#
-# Exercises three kinds of field defaults: static value (dflt1=1), callable
-# default (dflt2=lambda: 2), and nullable with no default (dfltn). Used in
-# model_sql.py to test INSERT SQL generation with defaults omitted, and in
-# models.py (via @requires_models) to verify that defaults are applied
-# correctly at the database and Python levels.
-# ---------------------------------------------------------------------------
+# Static, callable, and absent field defaults.
 
 class DfltM(TestModel):
     name = CharField()
     dflt1 = IntegerField(default=1)
     dflt2 = IntegerField(default=lambda: 2)
     dfltn = IntegerField(null=True)
+
+
+# FK to a non-PK unique column. CharField: MySQL cannot FK a TEXT column.
+
+class Package(TestModel):
+    barcode = CharField(unique=True)
+
+
+class PackageItem(TestModel):
+    name = CharField()
+    package = ForeignKeyField(Package, backref='items', field=Package.barcode)

@@ -1,24 +1,17 @@
 from decimal import Decimal as D
 import datetime
-import os
-import sys
+import json
 
 from peers import *
-from peers import sqlite3
 from playhouse.sqlite_ext import *
 
 from .base import BaseTestCase
 from .base import ModelTestCase
 from .base import TestModel
 from .base import get_in_memory_db
-from .base import get_sqlite_db
 from .base import requires_models
-from .base import skip_if
 from .base import skip_unless
 from .base import skip_unless_db
-from .base_models import Person
-from .base_models import Tweet
-from .base_models import User
 from .sqlite_helpers import compile_option
 from .sqlite_helpers import json_installed
 from .sqlite_helpers import json_patch_installed
@@ -34,45 +27,6 @@ try:
     CYTHON_EXTENSION = True
 except ImportError:
     CYTHON_EXTENSION = False
-
-
-class WeightedAverage(object):
-    def __init__(self):
-        self.total = 0.
-        self.count = 0.
-
-    def step(self, value, weight=None):
-        weight = weight or 1.
-        self.total += weight
-        self.count += (weight * value)
-
-    def finalize(self):
-        if self.total != 0.:
-            return self.count / self.total
-        return 0.
-
-def _cmp(l, r):
-    if l < r:
-        return -1
-    return 1 if r < l else 0
-
-def collate_reverse(s1, s2):
-    return -_cmp(s1, s2)
-
-@database.collation()
-def collate_case_insensitive(s1, s2):
-    return _cmp(s1.lower(), s2.lower())
-
-def title_case(s): return s.title()
-
-@database.func()
-def rstrip(s, n):
-    return s.rstrip(n)
-
-database.register_aggregate(WeightedAverage, 'weighted_avg', 1)
-database.register_aggregate(WeightedAverage, 'weighted_avg2', 2)
-database.register_collation(collate_reverse)
-database.register_function(title_case)
 
 
 class Post(TestModel):
@@ -119,12 +73,6 @@ class KeyData(TestModel):
 class JBData(TestModel):
     key = TextField()
     data = JSONBField()
-
-
-class Values(TestModel):
-    klass = IntegerField()
-    value = FloatField()
-    weight = FloatField()
 
 
 class FTS5Test(FTS5Model):
@@ -328,7 +276,7 @@ class TestJSONField(ModelTestCase):
             ('k3', {'x3': 'y3'}),
             ('k4', {'x4': 'y4'}))
         res = KeyData.insert_many(data).execute()
-        if database.returning_clause:
+        if self.database.returning_clause:
             self.assertEqual([r for r, in res], [1, 2, 3, 4])
         else:
             self.assertEqual(res, 4)
@@ -863,6 +811,16 @@ class TestFullTextSearch(BaseFTSTestCase, ModelTestCase):
             (self.messages[2], -0.36),
             (self.messages[3], -0.36)])
 
+    @requires_models(Document)
+    def test_bm25_all_zero_scores(self):
+        for message in self.messages:
+            Document.create(message=message)
+
+        # Indeterminate order since all are 0.0. All phrases contain the word
+        # faith, so there is no meaningful score.
+        query = Document.search_bm25('faith', with_score=True)
+        self.assertEqual([round(d.score, 2) for d in query], [-0.] * 5)
+
     def test_fts_delete_row(self):
         posts = [Post.create(message=msg) for msg in self.messages]
         ContentPost.rebuild()
@@ -974,25 +932,52 @@ class TestFullTextSearch(BaseFTSTestCase, ModelTestCase):
         assertAllColumns('zzzzz ddddd', [(1, -0.36), (2, -0.34)])
         assertAllColumns('ccccc bbbbb ddddd', [(2, -1.39), (1, -0.3)])
 
-    @requires_models(Document)
-    def test_bm25_alt_corpus(self):
+    @skip_unless(CYTHON_EXTENSION, 'requires _sqlite_udf c extension')
+    def test_bm25f(self):
+        def assertResults(term, expected):
+            query = MultiColumn.search_bm25f(term, [1.0, 0, 0, 0], True)
+            self.assertEqual(
+                [(mc.c4, round(mc.score, 2)) for mc in query],
+                expected)
+
+        self._create_multi_column()
+        MultiColumn.create(c1='aaaaa fffff', c4=5)
+
+        assertResults('aaaaa', [(5, -0.76), (1, -0.62)])
+        assertResults('fffff', [(5, -0.76), (3, -0.65)])
+        assertResults('eeeee', [(2, -2.13)])
+
+        # No column specified, use the first text field.
+        query = MultiColumn.search_bm25f('aaaaa OR fffff', [1., 3., 0, 0], 1)
+        self.assertEqual([(mc.c4, round(mc.score, 2)) for mc in query], [
+            (1, -14.18),
+            (5, -12.01),
+            (3, -11.48)])
+
+    @skip_unless(CYTHON_EXTENSION, 'requires _sqlite_udf c extension')
+    def test_lucene(self):
         for message in self.messages:
             Document.create(message=message)
 
-        query = Document.search_bm25('things', with_score=True)
-        self.assertEqual([(d.message, round(d.score, 2)) for d in query], [
-            (self.messages[4], -0.45),
-            (self.messages[2], -0.36)])
+        def assertResults(term, expected, sort_cleaned=False):
+            query = Document.search_lucene(term, with_score=True)
+            cleaned = [
+                (round(doc.score, 3), ' '.join(doc.message.split()[:2]))
+                for doc in query]
+            if sort_cleaned:
+                cleaned = sorted(cleaned)
+            self.assertEqual(cleaned, expected)
 
-        query = Document.search_bm25('believe', with_score=True)
-        self.assertEqual([(d.message, round(d.score, 2)) for d in query], [
-            (self.messages[3], -0.49),
-            (self.messages[0], -0.35)])
+        assertResults('things', [
+            (-0.166, 'Faith has'),
+            (-0.137, 'Be faithful')])
 
-        # Indeterminate order since all are 0.0. All phrases contain the word
-        # faith, so there is no meaningful score.
-        query = Document.search_bm25('faith', with_score=True)
-        self.assertEqual([round(d.score, 2) for d in query], [-0.] * 5)
+        assertResults('faith', [
+            (0.036, 'All who'),
+            (0.042, 'Faith has'),
+            (0.047, 'A faith'),
+            (0.049, 'Be faithful'),
+            (0.049, 'Faith consists')], sort_cleaned=True)
 
     def _test_fts_auto(self, ModelClass):
         posts = []
@@ -1109,7 +1094,7 @@ class TestFullTextSearch(BaseFTSTestCase, ModelTestCase):
                                              with_score=True)]
 
         # Weighting the title 3x ranks the title match (rowid 1) ahead of the
-        # body match (rowid 2); the dict forms must match the list form
+        # body match (rowid 2). The dict forms must match the list form
         # exactly.
         by_list = results([3., 1.])
         self.assertEqual([rowid for rowid, _ in by_list], [1, 2])
@@ -1246,54 +1231,6 @@ class TestFullTextSearch(BaseFTSTestCase, ModelTestCase):
                 [(0, -0.85), (1, -0.)])
 
 
-@skip_unless(CYTHON_EXTENSION, 'requires _sqlite_udf c extension')
-class TestFullTextSearchCython(TestFullTextSearch):
-    def test_bm25f(self):
-        def assertResults(term, expected):
-            query = MultiColumn.search_bm25f(term, [1.0, 0, 0, 0], True)
-            self.assertEqual(
-                [(mc.c4, round(mc.score, 2)) for mc in query],
-                expected)
-
-        self._create_multi_column()
-        MultiColumn.create(c1='aaaaa fffff', c4=5)
-
-        assertResults('aaaaa', [(5, -0.76), (1, -0.62)])
-        assertResults('fffff', [(5, -0.76), (3, -0.65)])
-        assertResults('eeeee', [(2, -2.13)])
-
-        # No column specified, use the first text field.
-        query = MultiColumn.search_bm25f('aaaaa OR fffff', [1., 3., 0, 0], 1)
-        self.assertEqual([(mc.c4, round(mc.score, 2)) for mc in query], [
-            (1, -14.18),
-            (5, -12.01),
-            (3, -11.48)])
-
-    def test_lucene(self):
-        for message in self.messages:
-            Document.create(message=message)
-
-        def assertResults(term, expected, sort_cleaned=False):
-            query = Document.search_lucene(term, with_score=True)
-            cleaned = [
-                (round(doc.score, 3), ' '.join(doc.message.split()[:2]))
-                for doc in query]
-            if sort_cleaned:
-                cleaned = sorted(cleaned)
-            self.assertEqual(cleaned, expected)
-
-        assertResults('things', [
-            (-0.166, 'Faith has'),
-            (-0.137, 'Be faithful')])
-
-        assertResults('faith', [
-            (0.036, 'All who'),
-            (0.042, 'Faith has'),
-            (0.047, 'A faith'),
-            (0.049, 'Be faithful'),
-            (0.049, 'Faith consists')], sort_cleaned=True)
-
-
 @skip_unless(FTS5Model.fts5_installed(), 'requires fts5')
 class TestFTS5(BaseFTSTestCase, ModelTestCase):
     database = database
@@ -1389,10 +1326,11 @@ class TestFTS5(BaseFTSTestCase, ModelTestCase):
     def test_search_dict_weights_unindexed(self):
         # Regression: FTS5 bm25() weights are positional across *all* columns,
         # including UNINDEXED ones. The dict form skipped unindexed columns, so
-        # with `extra` UNINDEXED between `title` and `body` a weight on `body`
-        # was mis-applied to `extra`. It must behave exactly like the list form.
-        SearchWeight5.create(title='alpha', extra='junk', body='common')  # rowid 1
-        SearchWeight5.create(title='common', extra='junk', body='alpha')  # rowid 2
+        # with `extra` UNINDEXED between `title` and `body` a weight on
+        # `body` was mis-applied to `extra`. It must behave exactly like
+        # the list form. The two rows below are rowid 1 and rowid 2.
+        SearchWeight5.create(title='alpha', extra='junk', body='common')
+        SearchWeight5.create(title='common', extra='junk', body='alpha')
 
         def order(weights):
             return [x.rowid for x in
@@ -1688,113 +1626,6 @@ class TestFTS5(BaseFTSTestCase, ModelTestCase):
             self.assertEqual(FTS5Test.clean_query(a), b)
 
 
-class TestUserDefinedCallbacks(ModelTestCase):
-    database = database
-    requires = [Post, Values]
-
-    def test_custom_agg(self):
-        data = (
-            (1, 3.4, 1.0),
-            (1, 6.4, 2.3),
-            (1, 4.3, 0.9),
-            (2, 3.4, 1.4),
-            (3, 2.7, 1.1),
-            (3, 2.5, 1.1),
-        )
-        for klass, value, wt in data:
-            Values.create(klass=klass, value=value, weight=wt)
-
-        vq = (Values
-              .select(
-                  Values.klass,
-                  fn.weighted_avg(Values.value).alias('wtavg'),
-                  fn.avg(Values.value).alias('avg'))
-              .group_by(Values.klass))
-        q_data = [(v.klass, v.wtavg, v.avg) for v in vq]
-        self.assertEqual(q_data, [
-            (1, 4.7, 4.7),
-            (2, 3.4, 3.4),
-            (3, 2.6, 2.6)])
-
-        vq = (Values
-              .select(
-                  Values.klass,
-                  fn.weighted_avg2(Values.value, Values.weight).alias('wtavg'),
-                  fn.avg(Values.value).alias('avg'))
-              .group_by(Values.klass))
-        q_data = [(v.klass, str(v.wtavg)[:4], v.avg) for v in vq]
-        self.assertEqual(q_data, [
-            (1, '5.23', 4.7),
-            (2, '3.4', 3.4),
-            (3, '2.6', 2.6)])
-
-    def test_custom_collation(self):
-        for i in [1, 4, 3, 5, 2]:
-            Post.create(message='p%d' % i)
-
-        pq = Post.select().order_by(Post.message.collate('collate_reverse'))
-        self.assertEqual([p.message for p in pq],
-                         ['p5', 'p4', 'p3', 'p2', 'p1'])
-
-        pq = Post.select().order_by(
-            Post.message.asc(collation='collate_reverse'))
-        self.assertEqual([p.message for p in pq],
-                         ['p5', 'p4', 'p3', 'p2', 'p1'])
-
-        pq = Post.select().order_by(
-            Post.message.desc(collation='collate_reverse'))
-        self.assertEqual([p.message for p in pq],
-                         ['p1', 'p2', 'p3', 'p4', 'p5'])
-
-    def test_collation_decorator(self):
-        posts = [Post.create(message=m)
-                 for m in ['aaa', 'Aab', 'ccc', 'Bba', 'BbB']]
-        exprs = (
-            Post.message.collate('collate_case_insensitive'),
-            Post.message.asc(collation='collate_case_insensitive'))
-        for expr in exprs:
-            pq = Post.select().order_by(expr)
-            self.assertEqual([p.message for p in pq], [
-                'aaa',
-                'Aab',
-                'Bba',
-                'BbB',
-                'ccc'])
-
-    def test_custom_function(self):
-        p1 = Post.create(message='this is a test')
-        p2 = Post.create(message='another TEST')
-
-        sq = Post.select().where(fn.title_case(Post.message) == 'This Is A Test')
-        self.assertEqual(list(sq), [p1])
-
-        sq = Post.select(fn.title_case(Post.message)).tuples()
-        self.assertEqual([x[0] for x in sq], [
-            'This Is A Test',
-            'Another Test',
-        ])
-
-    def test_function_decorator(self):
-        [Post.create(message=m) for m in ['testing', 'chatting  ', '  foo']]
-        pq = Post.select(fn.rstrip(Post.message, 'ing')).order_by(Post.id)
-        self.assertEqual([x[0] for x in pq.tuples()], [
-            'test', 'chatting  ', '  foo'])
-
-        pq = Post.select(fn.rstrip(Post.message, ' ')).order_by(Post.id)
-        self.assertEqual([x[0] for x in pq.tuples()], [
-            'testing', 'chatting', '  foo'])
-
-    def test_use_across_connections(self):
-        db = get_in_memory_db()
-        @db.func()
-        def rev(s):
-            return s[::-1]
-
-        db.connect(); db.close(); db.connect()
-        curs = db.execute_sql('select rev(?)', ('hello',))
-        self.assertEqual(curs.fetchone(), ('olleh',))
-
-
 class TestRowIDField(ModelTestCase):
     database = database
     requires = [RowIDModel]
@@ -1834,135 +1665,6 @@ class TestRowIDField(ModelTestCase):
         RowIDModel.insert_many([{RowIDModel.rowid: 5, RowIDModel.data: 1}]).execute()
         self.assertEqual(5, RowIDModel.select(RowIDModel.rowid).first().rowid)
 
-    def test_insert_many_with_rowid_with_field_validation(self):
-        RowIDModel.insert_many([{RowIDModel.rowid: 5, RowIDModel.data: 1}]).execute()
-        self.assertEqual(5, RowIDModel.select(RowIDModel.rowid).first().rowid)
-
-
-class CalendarMonth(TestModel):
-    name = TextField()
-    value = IntegerField()
-
-class CalendarDay(TestModel):
-    month = ForeignKeyField(CalendarMonth, backref='days')
-    value = IntegerField()
-
-
-class TestIntWhereChain(ModelTestCase):
-    database = database
-    requires = [CalendarMonth, CalendarDay]
-
-    def test_int_where_chain(self):
-        with self.database.atomic():
-            jan = CalendarMonth.create(name='january', value=1)
-            feb = CalendarMonth.create(name='february', value=2)
-            CalendarDay.insert_many([{'month': jan, 'value': i + 1}
-                                     for i in range(31)]).execute()
-            CalendarDay.insert_many([{'month': feb, 'value': i + 1}
-                                     for i in range(28)]).execute()
-
-        def assertValues(query, expected):
-            self.assertEqual(sorted([d.value for d in query]), list(expected))
-
-        q = CalendarDay.select().join(CalendarMonth)
-        jq = q.where(CalendarMonth.name == 'january')
-        jq1 = jq.where(CalendarDay.value >= 25)
-        assertValues(jq1, range(25, 32))
-
-        jq2 = jq1.where(CalendarDay.value < 30)
-        assertValues(jq2, range(25, 30))
-
-        fq = q.where(CalendarMonth.name == 'february')
-        fq1 = fq.where(CalendarDay.value >= 25)
-        assertValues(fq1, range(25, 29))
-
-        fq2 = fq1.where(CalendarDay.value < 30)
-        assertValues(fq2, range(25, 29))
-
-
-class Datum(TestModel):
-    a = BareField()
-    b = BareField(collation='BINARY')
-    c = BareField(collation='RTRIM')
-    d = BareField(collation='NOCASE')
-
-
-class TestCollatedFieldDefinitions(ModelTestCase):
-    database = get_in_memory_db()
-    requires = [Datum]
-
-    def test_collated_fields(self):
-        rows = (
-            (1, 'abc', 'abc',  'abc  ', 'abc'),
-            (2, 'abc', 'abc',  'abc',   'ABC'),
-            (3, 'abc', 'abc',  'abc ',  'Abc'),
-            (4, 'abc', 'abc ', 'ABC',   'abc'))
-        for pk, a, b, c, d in rows:
-            Datum.create(id=pk, a=a, b=b, c=c, d=d)
-
-        def assertC(query, expected):
-            self.assertEqual([r.id for r in query], expected)
-
-        base = Datum.select().order_by(Datum.id)
-
-        # Text comparison a=b is performed using binary collating sequence.
-        assertC(base.where(Datum.a == Datum.b), [1, 2, 3])
-
-        # Text comparison a=b is performed using the RTRIM collating sequence.
-        assertC(base.where(Datum.a == Datum.b.collate('RTRIM')), [1, 2, 3, 4])
-
-        # Text comparison d=a is performed using the NOCASE collating sequence.
-        assertC(base.where(Datum.d == Datum.a), [1, 2, 3, 4])
-
-        # Text comparison a=d is performed using the BINARY collating sequence.
-        assertC(base.where(Datum.a == Datum.d), [1, 4])
-
-        # Text comparison 'abc'=c is performed using RTRIM collating sequence.
-        assertC(base.where('abc' == Datum.c), [1, 2, 3])
-
-        # Text comparison c='abc' is performed using RTRIM collating sequence.
-        assertC(base.where(Datum.c == 'abc'), [1, 2, 3])
-
-        # Grouping is performed using the NOCASE collating sequence (Values
-        # 'abc', 'ABC', and 'Abc' are placed in the same group).
-        query = Datum.select(fn.COUNT(Datum.id)).group_by(Datum.d)
-        self.assertEqual(query.scalar(), 4)
-
-        # Grouping is performed using the BINARY collating sequence.  'abc' and
-        # 'ABC' and 'Abc' form different groups.
-        query = Datum.select(fn.COUNT(Datum.id)).group_by(Datum.d.concat(''))
-        self.assertEqual([r[0] for r in query.tuples()], [1, 1, 2])
-
-        # Sorting or column c is performed using the RTRIM collating sequence.
-        assertC(base.order_by(Datum.c, Datum.id), [4, 1, 2, 3])
-
-        # Sorting of (c||'') is performed using the BINARY collating sequence.
-        assertC(base.order_by(Datum.c.concat(''), Datum.id), [4, 2, 3, 1])
-
-        # Sorting of column c is performed using the NOCASE collating sequence.
-        assertC(base.order_by(Datum.c.collate('NOCASE'), Datum.id),
-                [2, 4, 3, 1])
-
-
-class TestReadOnly(ModelTestCase):
-    database = get_sqlite_db()
-
-    @requires_models(User)
-    def test_read_only(self):
-        User.create(username='foo')
-
-        db_filename = self.database.database
-        db = SqliteDatabase('file:%s?mode=ro' % db_filename, uri=True)
-        cursor = db.execute_sql('select username from users')
-        self.assertEqual(cursor.fetchone(), ('foo',))
-
-        self.assertRaises(OperationalError, db.execute_sql,
-                          'insert into users (username) values (?)', ('huey',))
-
-        # We cannot create a database if in read-only mode.
-        db = SqliteDatabase('file:xx_not_exists.db?mode=ro', uri=True)
-        self.assertRaises(OperationalError, db.connect)
-
 
 class TDecModel(TestModel):
     value = TDecimalField(max_digits=24, decimal_places=16, auto_round=True)
@@ -1986,281 +1688,8 @@ class TestTDecimalField(ModelTestCase):
         self.assertEqual(td2_db.value, D('12345678.0123456789012346'))
 
 
-class KVR(TestModel):
-    key = TextField(primary_key=True)
-    value = IntegerField()
-
-class KVC(TestModel):
-    key = TextField()
-    value = IntegerField()
-    class Meta:
-        primary_key = CompositeKey('key', 'value')
-
-
-@skip_unless(database.server_version >= (3, 35, 0), 'sqlite returning clause required')
-class TestSqliteReturning(ModelTestCase):
-    database = database
-    requires = [Person, User, KVR]
-
-    def test_sqlite_returning(self):
-        iq = (User
-              .insert_many([{'username': 'u%s' % i} for i in range(3)])
-              .returning(User.id))
-        self.assertEqual([r.id for r in iq.execute()], [1, 2, 3])
-
-        res = (User
-               .insert_many([{'username': 'u%s' % i} for i in (4, 5)])
-               .returning(User)
-               .execute())
-        self.assertEqual([(r.id, r.username) for r in res],
-                         [(4, 'u4'), (5, 'u5')])
-
-        # Simple insert returns the ID.
-        res = User.insert(username='u6').execute()
-        self.assertEqual(res, 6)
-
-        iq = (User
-              .insert_many([{'username': 'u%s' % i} for i in (7, 8, 9)])
-              .returning(User)
-              .namedtuples())
-        curs = iq.execute()
-        self.assertEqual([u.id for u in curs], [7, 8, 9])
-
-    def test_sqlite_on_conflict_returning(self):
-        p = Person.create(first='f1', last='l1', dob='1990-01-01')
-        self.assertEqual(p.id, 1)
-
-        iq = Person.insert_many([
-            {'first': 'f%s' % i, 'last': 'l%s' %i, 'dob': '1990-01-%02d' % i}
-            for i in range(1, 3)])
-        iq = iq.on_conflict(conflict_target=[Person.first, Person.last],
-                            update={'dob': '2000-01-01'})
-        p1, p2 = iq.returning(Person).execute()
-
-        self.assertEqual((p1.first, p1.last), ('f1', 'l1'))
-        self.assertEqual(p1.dob, datetime.date(2000, 1, 1))
-        self.assertEqual((p2.first, p2.last), ('f2', 'l2'))
-        self.assertEqual(p2.dob, datetime.date(1990, 1, 2))
-
-        p3 = Person.insert(first='f3', last='l3', dob='1990-01-03').execute()
-        self.assertEqual(p3, 3)
-
-    def test_text_pk(self):
-        res = KVR.create(key='k1', value=1)
-        self.assertEqual((res.key, res.value), ('k1', 1))
-
-        res = KVR.insert(key='k2', value=2).execute()
-        self.assertEqual(res, 2)
-        #self.assertEqual(res, 'k2')
-
-        # insert_many() returns the primary-key as usual.
-        iq = (KVR
-              .insert_many([{'key': 'k%s' % i, 'value': i} for i in (3, 4)])
-              .returning(KVR.key))
-        self.assertEqual([r.key for r in iq.execute()], ['k3', 'k4'])
-
-        iq = KVR.insert_many([{'key': 'k%s' % i, 'value': i} for i in (4, 5)])
-        iq = iq.on_conflict(conflict_target=[KVR.key],
-                            update={KVR.value: KVR.value + 10})
-        res = iq.returning(KVR).execute()
-        self.assertEqual([(r.key, r.value) for r in res],
-                         [('k4', 14), ('k5', 5)])
-
-        res = (KVR
-               .update(value=KVR.value + 10)
-               .where(KVR.key.in_(['k1', 'k3', 'kx']))
-               .returning(KVR)
-               .execute())
-        self.assertEqual([(r.key, r.value) for r in res],
-                         [('k1', 11), ('k3', 13)])
-
-        res = (KVR.delete()
-               .where(KVR.key.not_in(['k2', 'k3', 'k4']))
-               .returning(KVR)
-               .execute())
-        self.assertEqual([(r.key, r.value) for r in res],
-                         [('k1', 11), ('k5', 5)])
-
-
-@skip_unless(database.server_version >= (3, 35, 0), 'sqlite returning clause required')
-class TestSqliteReturningConfig(ModelTestCase):
-    database = SqliteDatabase(':memory:', returning_clause=True)
-    requires = [KVC, KVR, User]
-
-    def test_pk_set_properly(self):
-        user = User.create(username='u1')
-        self.assertEqual(user.id, 1)
-
-        kvr = KVR.create(key='k1', value=1)
-        self.assertEqual(kvr.key, 'k1')
-
-    def test_insert_behavior(self):
-        iq = User.insert({'username': 'u1'})
-        self.assertEqual(iq.execute(), 1)
-
-        iq = User.insert_many([{'username': 'u2'}, {'username': 'u3'}])
-        self.assertEqual(list(iq.execute()), [(2,), (3,)])
-
-        # as_rowcount() suppresses the implicit RETURNING, so the driver
-        # rowcount is valid here.
-        iq = User.insert_many([('u4',), ('u5',)]).as_rowcount()
-        self.assertEqual(iq.execute(), 2)
-
-        iq = KVR.insert({'key': 'k1', 'value': 1})
-        self.assertEqual(iq.execute(), 'k1')
-
-        iq = KVR.insert_many([('k2', 2), ('k3', 3)])
-        self.assertEqual(list(iq.execute()), [('k2',), ('k3',)])
-
-        iq = KVR.insert_many([('k4', 4), ('k5', 5)]).as_rowcount()
-        self.assertEqual(iq.execute(), 2)
-
-    def test_insert_composite_pk(self):
-        iq = KVC.insert({'key': 'k1', 'value': 1})
-        self.assertEqual(iq.execute(), ('k1', 1))
-
-        iq = KVC.insert_many([('k2', 2), ('k3', 3)])
-        self.assertEqual(list(iq.execute()), [('k2', 2), ('k3', 3)])
-
-        iq = KVC.insert_many([('k4', 4), ('k5', 5)]).as_rowcount()
-        self.assertEqual(iq.execute(), 2)
-
-    def test_insert_on_conflict(self):
-        KVR.create(key='k1', value=1)
-        iq = (KVR.insert({'key': 'k1', 'value': 100})
-              .on_conflict(conflict_target=[KVR.key],
-                           update={KVR.value: KVR.value + 10}))
-        self.assertEqual(iq.execute(), 'k1')
-        self.assertEqual(KVR.get(KVR.key == 'k1').value, 11)
-
-        KVR.create(key='k2', value=2)
-        iq = (KVR.insert_many([
-            {'key': 'k1', 'value': 100},
-            {'key': 'k2', 'value': 200},
-            {'key': 'k3', 'value': 300}])
-            .on_conflict(conflict_target=[KVR.key],
-                         update={KVR.value: KVR.value + 10}))
-        self.assertEqual(list(iq.execute()), [('k1',), ('k2',), ('k3',)])
-        self.assertEqual(sorted(KVR.select().tuples()),
-                         [('k1', 21), ('k2', 12), ('k3', 300)])
-
-    def test_insert_ignored_returns_none(self):
-        KVR.create(key='k1', value=1)
-        iq = KVR.insert({'key': 'k1', 'value': 100}).on_conflict_ignore()
-        self.assertTrue(iq.execute() is None)
-        self.assertEqual(KVR.get(KVR.key == 'k1').value, 1)
-
-        iq = KVC.insert({'key': 'k1', 'value': 1})
-        self.assertEqual(iq.execute(), ('k1', 1))
-        self.assertTrue(iq.clone().on_conflict_ignore().execute() is None)
-
-    def test_update_delete_rowcounts(self):
-        users = [User.create(username=u) for u in 'abc']
-        kvrs = [KVR.create(key='k%s' % i, value=i) for i in (1, 2, 3)]
-
-        uq = User.update(username='c2').where(User.username == 'c')
-        self.assertEqual(uq.execute(), 1)
-        uq = User.update(username=User.username.concat('x'))
-        self.assertEqual(uq.execute(), 3)
-
-        dq = User.delete().where(User.username.in_(['bx', 'c2x']))
-        self.assertEqual(dq.execute(), 2)
-
-        uq = KVR.update(value=KVR.value + 10).where(KVR.key == 'k3')
-        self.assertEqual(uq.execute(), 1)
-        uq = KVR.update(value=KVR.value + 100)
-        self.assertEqual(uq.execute(), 3)
-
-        dq = KVR.delete().where(KVR.value.in_([102, 113]))
-        self.assertEqual(dq.execute(), 2)
-
-    def test_update_delete_explicit_returning(self):
-        users = [User.create(username=u) for u in 'abc']
-
-        uq = (User.update(username='c2')
-              .where(User.username == 'c')
-              .returning(User.id, User.username))
-        for _ in range(2):
-            self.assertEqual([u.username for u in uq.execute()], ['c2'])
-        self.assertEqual(list(uq.clone().execute()), [])
-
-        uq = (User.update(username=User.username.concat('x'))
-              .where(~User.username.endswith('x'))  # For idempotency.
-              .returning(User.id, User.username)
-              .tuples())
-        for _ in range(2):
-            self.assertEqual(sorted(uq.execute()),
-                             [(1, 'ax'), (2, 'bx'), (3, 'c2x')])
-        self.assertEqual(list(uq.clone().execute()), [])
-
-        dq = User.delete().where(User.username == 'c2x').returning(User)
-        for _ in range(2):
-            # The result is cached to support multiple iterations.
-            self.assertEqual([u.username for u in dq.execute()], ['c2x'])
-        self.assertEqual(list(dq.clone().execute()), [])
-
-        dq = User.delete().returning(User).tuples()
-        for _ in range(2):
-            # The result is cached to support multiple iterations.
-            self.assertEqual(sorted(dq.execute()), [(1, 'ax'), (2, 'bx')])
-        self.assertEqual(list(dq.clone().execute()), [])
-
-    def test_bulk_create_update(self):
-        users = [User(username='u%s' % i) for i in range(5)]
-        with self.assertQueryCount(1):
-            User.bulk_create(users)
-
-        self.assertEqual(User.select().count(), 5)
-        self.assertEqual(sorted(User.select().tuples()), [
-            (1, 'u0'), (2, 'u1'), (3, 'u2'), (4, 'u3'), (5, 'u4')])
-
-        users[0].username = 'u0x'
-        users[2].username = 'u2x'
-        users[4].username = 'u4x'
-        with self.assertQueryCount(1):
-            n = User.bulk_update(users, ['username'])
-            self.assertEqual(n, 5)
-
-        self.assertEqual(sorted(User.select().tuples()), [
-            (1, 'u0x'), (2, 'u1'), (3, 'u2x'), (4, 'u3'), (5, 'u4x')])
-
-    @requires_models(User, Tweet)
-    def test_fk_set_correctly(self):
-        # Ensure FK can be set lazily.
-        user = User(username='u1')
-        tweet = Tweet(user=user, content='t1')
-        user.save()
-        tweet.save()
-
-
-@skip_unless(database.server_version >= (3, 20, 0), 'sqlite deterministic requires >= 3.20')
-@skip_unless(sys.version_info >= (3, 8, 0), 'sqlite deterministic requires Python >= 3.8')
-class TestDeterministicFunction(ModelTestCase):
-    database = get_in_memory_db()
-
-    def test_deterministic(self):
-        db = self.database
-        @db.func(deterministic=True)
-        def pylower(s):
-            if s is not None:
-                return s.lower()
-
-        class Reg(db.Model):
-            key = TextField()
-            class Meta:
-                indexes = [
-                    SQL('create unique index "reg_pylower_key" '
-                        'on "reg" (pylower("key"))')]
-
-        db.drop_tables([Reg])
-        db.create_tables([Reg])
-        Reg.create(key='k1')
-        with self.assertRaises(IntegrityError):
-            with db.atomic():
-                Reg.create(key='K1')
-
-@skip_unless(sys.version_info >= (3, 7, 0), 'isoformat (":") works 3.7+')
 class TestISODateTimeField(ModelTestCase):
+    # ISODateTimeField is a sqlite_ext field.
     database = get_in_memory_db()
     requires = [DT]
 
@@ -2311,12 +1740,10 @@ except ImportError:
     pass
 else:
     cysqlite_database = CySqliteDatabase('peers_test.db', timeout=100)
-    cysqlite_database.register_aggregate(WeightedAverage, 'weighted_avg', 1)
-    cysqlite_database.register_aggregate(WeightedAverage, 'weighted_avg2', 2)
-    cysqlite_database.register_collation(collate_reverse)
-    cysqlite_database.register_function(title_case)
-    cysqlite_database.collation()(collate_case_insensitive)
-    cysqlite_database.func()(rstrip)
+    if CYTHON_EXTENSION:
+        # CySqliteDatabase's native rank functions include no bm25f.
+        from playhouse.sqlite_udf import bm25f
+        cysqlite_database.register_function(bm25f, 'fts_bm25f')
 
     test_cases = [
         TestJSONField,
@@ -2325,18 +1752,9 @@ else:
         TestSqliteExtensions,
         TestFullTextSearch,
         TestFTS5,
-        TestUserDefinedCallbacks,
         TestRowIDField,
-        TestIntWhereChain,
-        TestCollatedFieldDefinitions,
-        TestReadOnly,
-        TestSqliteReturning,
-        TestDeterministicFunction,
         TestISODateTimeField,
-        # For various reasons these do not work.
-        #TestJsonContains,
         TestTDecimalField,
-        #TestSqliteReturningConfig,
     ]
 
     for test_case in test_cases:
@@ -2344,8 +1762,3 @@ else:
         globals()[new_name] = type(new_name, (test_case,), {
             'database': cysqlite_database})
     del test_case  # Or the loader collects the last base class twice.
-
-    @skip_unless(cysqlite_database.server_version >= (3, 35, 0),
-                 'sqlite returning clause required')
-    class TestSqliteReturningConfigCySqlite(TestSqliteReturningConfig):
-        database = CySqliteDatabase(':memory:', returning_clause=True)

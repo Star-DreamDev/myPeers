@@ -4,7 +4,6 @@ import unittest
 
 src_dir = os.path.realpath(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, src_dir)
-from tests import *
 
 
 if __name__ == '__main__':
@@ -31,4 +30,4 @@ if __name__ == '__main__':
                                   \/_/\/_/ \_________\/
     """)
     print('\x1b[0m')
-    unittest.main(argv=sys.argv)
+    unittest.main(module='tests', argv=sys.argv)

@@ -1,21 +1,17 @@
 """
 Prefetch / N+1 query optimization tests.
 
-All models in this module are local (not from base_models), because prefetch
-tests need specific relational graph shapes that differ from the shared models.
-
-Test case ordering:
-
-* Core prefetch (Person > Note > NoteItem/Like/Flag, plus Category, Package)
-* Multi-reference prefetch (X > Z, A > B > C > C1/C2)
-* Multiple FK prefetch with join type control (State/Transition)
+All models in this module except Package/PackageItem are local (not from
+base_models), because prefetch tests need specific relational graph shapes
+that differ from the shared models.
 """
 from peers import *
 
-from .base import get_in_memory_db
 from .base import requires_models
 from .base import ModelTestCase
 from .base import TestModel
+from .base_models import Package
+from .base_models import PackageItem
 
 
 # prefetch() supports the strategies that embed the parent as a subquery.
@@ -65,21 +61,11 @@ class Category(TestModel):
     parent = ForeignKeyField('self', backref='children', null=True)
 
 
-class Package(TestModel):
-    barcode = TextField(unique=True)
-
-
-class PackageItem(TestModel):
-    name = TextField()
-    package = ForeignKeyField(Package, backref='items', field=Package.barcode)
-
-
 # ===========================================================================
 # Core prefetch tests
 # ===========================================================================
 
 class TestPrefetch(ModelTestCase):
-    database = get_in_memory_db()
     requires = [Person, Note, NoteItem, Like, Flag]
 
     def create_test_data(self):
@@ -408,8 +394,8 @@ class TestPrefetch(ModelTestCase):
 
     @requires_models(Relationship)
     def test_multiple_foreign_keys(self):
-        self.database.pragma('foreign_keys', 0)
-        Person.delete().execute()
+        for model in (Like, Flag, NoteItem, Note, Person):
+            model.delete().execute()
         c, h, z = [Person.create(name=name) for name in
                                  ('charlie', 'huey', 'zaizee')]
         RC = lambda f, t: Relationship.create(from_person=f, to_person=t)
@@ -555,8 +541,8 @@ class TestPrefetch(ModelTestCase):
                     for item in note.items:
                         self.assertEqual(item.dirty_fields, [])
 
-            # Forward-fk population (note.person) must also leave the row clean;
-            # the fk setattr would otherwise mark it dirty.
+            # Forward-fk population (note.person) must also leave the row
+            # clean. The fk setattr would otherwise mark it dirty.
             notes = prefetch(Note.select(), Person.select(), prefetch_type=pt)
             for note in notes:
                 self.assertEqual(note.dirty_fields, [])
@@ -594,7 +580,6 @@ class C2(TestModel):
 
 
 class TestPrefetchMultiRefs(ModelTestCase):
-    database = get_in_memory_db()
     requires = [X, Z, A, B, C, C1, C2]
 
     def test_prefetch_multirefs(self):
@@ -740,7 +725,6 @@ class TestJoinTypePrefetchMultipleFKs(ModelTestCase):
 
 
 class TestPrefetchErrorPaths(ModelTestCase):
-    database = get_in_memory_db()
     requires = [Person]
 
     def test_prefetch_unrelated_model_error(self):

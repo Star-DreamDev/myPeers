@@ -1,11 +1,9 @@
 #coding:utf-8
 import datetime
-import functools
 import json
 import os
 import uuid
 from decimal import Decimal as Dc
-from types import MethodType
 
 from peers import *
 from peers import Psycopg3Adapter
@@ -13,8 +11,6 @@ from playhouse.postgres_ext import *
 from playhouse.reflection import Introspector
 
 from .base import BaseTestCase
-from .base import DatabaseTestCase
-from .base import IS_PSYCOPG3
 from .base import ModelTestCase
 from .base import TestModel
 from .base import db_loader
@@ -22,8 +18,6 @@ from .base import requires_models
 from .base import skip_if
 from .base import skip_unless
 from .base_models import Register
-from .base_models import Tweet
-from .base_models import User
 from .postgres_helpers import BaseBinaryJsonFieldTestCase
 from .postgres_helpers import BaseJsonFieldTestCase
 
@@ -783,7 +777,7 @@ class TestBinaryJsonField(BaseBinaryJsonFieldTestCase, ModelTestCase):
         bj = BJson.get(BJson.id == bj.id)
         self.assertEqual(bj.data, {'a': 1, 'b': 'x', 'arr': [0, 1, 2]})
 
-    @skip_unless(pg12, 'requires Postgres 12+ for jsonpath support')
+    @skip_unless(pg12(), 'requires Postgres 12+ for jsonpath support')
     def test_path_exists(self):
         BJson.delete().execute()
         a = BJson.create(data={'foo': [1, 5, 10]})
@@ -798,7 +792,7 @@ class TestBinaryJsonField(BaseBinaryJsonFieldTestCase, ModelTestCase):
         q = BJson.select().where(BJson.data.path_exists('$.foo'))
         self.assertEqual(sorted(m.id for m in q), sorted([a.id, b.id]))
 
-    @skip_unless(pg12, 'requires Postgres 12+ for jsonpath support')
+    @skip_unless(pg12(), 'requires Postgres 12+ for jsonpath support')
     def test_path_match(self):
         BJson.delete().execute()
         a = BJson.create(data={'n': 10})
@@ -807,7 +801,7 @@ class TestBinaryJsonField(BaseBinaryJsonFieldTestCase, ModelTestCase):
         q = BJson.select().where(BJson.data.path_match('$.n > 5'))
         self.assertEqual([m.id for m in q], [a.id])
 
-    @skip_unless(pg12, 'requires Postgres 12+ for jsonpath support')
+    @skip_unless(pg12(), 'requires Postgres 12+ for jsonpath support')
     def test_path_query_array(self):
         BJson.delete().execute()
         BJson.create(data={'items': [
@@ -820,7 +814,7 @@ class TestBinaryJsonField(BaseBinaryJsonFieldTestCase, ModelTestCase):
             '$.items[*] ? (@.qty > 2).name'))
         self.assertEqual(q.tuples()[:][0][0], ['b', 'c'])
 
-    @skip_unless(pg12, 'requires Postgres 12+ for jsonpath support')
+    @skip_unless(pg12(), 'requires Postgres 12+ for jsonpath support')
     def test_path_query_first(self):
         BJson.delete().execute()
         BJson.create(data={'items': [{'qty': 1}, {'qty': 5}, {'qty': 3}]})
@@ -829,17 +823,17 @@ class TestBinaryJsonField(BaseBinaryJsonFieldTestCase, ModelTestCase):
             '$.items[*] ? (@.qty > 2).qty'))
         self.assertEqual(q.tuples()[:][0][0], 5)
 
-    @skip_unless(pg12, 'requires Postgres 12+ for jsonpath support')
+    @skip_unless(pg12(), 'requires Postgres 12+ for jsonpath support')
     def test_path_query_srf(self):
-        # path_query returns a set-returning function; Postgres expands it
-        # into multiple rows when it appears in SELECT.
+        # path_query returns a set-returning function. Postgres expands it into
+        # multiple rows when it appears in SELECT.
         BJson.delete().execute()
         BJson.create(data={'tags': ['a', 'b', 'c']})
 
         q = BJson.select(BJson.data.path_query('$.tags[*]').alias('tag'))
         self.assertEqual(sorted(r[0] for r in q.tuples()), ['a', 'b', 'c'])
 
-    @skip_unless(pg12, 'requires Postgres 12+ for jsonpath support')
+    @skip_unless(pg12(), 'requires Postgres 12+ for jsonpath support')
     def test_path_ops_on_lookup(self):
         # path_* operators are also exposed on _JsonLookupBase so they can
         # target a sub-document rather than the whole field.
@@ -1078,58 +1072,6 @@ class TestIndexedField(BaseTestCase):
              'USING MAGIC ("fake_index_with_type")')])
 
 
-class IDAlways(TestModel):
-    id = IdentityField(generate_always=True)
-    data = CharField()
-
-
-class IDByDefault(TestModel):
-    id = IdentityField()
-    data = CharField()
-
-
-class TestIdentityField(ModelTestCase):
-    database = db
-    requires = [IDAlways, IDByDefault]
-
-    def test_identity_field_always(self):
-        iq = IDAlways.insert_many([(d,) for d in ('d1', 'd2', 'd3')])
-        curs = iq.execute()
-        self.assertEqual(list(curs), [(1,), (2,), (3,)])
-
-        # Cannot specify id when generate always is true.
-        with self.assertRaises(ProgrammingError):
-            with self.database.atomic():
-                IDAlways.create(id=10, data='d10')
-
-        query = IDAlways.select().order_by(IDAlways.id)
-        self.assertEqual(list(query.tuples()), [
-            (1, 'd1'), (2, 'd2'), (3, 'd3')])
-
-    def test_identity_field_by_default(self):
-        iq = IDByDefault.insert_many([(d,) for d in ('d1', 'd2', 'd3')])
-        curs = iq.execute()
-        self.assertEqual(list(curs), [(1,), (2,), (3,)])
-
-        # Cannot specify id when generate always is true.
-        IDByDefault.create(id=10, data='d10')
-
-        query = IDByDefault.select().order_by(IDByDefault.id)
-        self.assertEqual(list(query.tuples()), [
-            (1, 'd1'), (2, 'd2'), (3, 'd3'), (10, 'd10')])
-
-    def test_schema(self):
-        sql, params = IDAlways._schema._create_table(False).query()
-        self.assertEqual(sql, (
-            'CREATE TABLE "id_always" ("id" INT GENERATED ALWAYS AS IDENTITY '
-            'NOT NULL PRIMARY KEY, "data" VARCHAR(255) NOT NULL)'))
-
-        sql, params = IDByDefault._schema._create_table(False).query()
-        self.assertEqual(sql, (
-            'CREATE TABLE "id_by_default" ("id" INT GENERATED BY DEFAULT AS '
-            'IDENTITY NOT NULL PRIMARY KEY, "data" VARCHAR(255) NOT NULL)'))
-
-
 class TestServerSide(ModelTestCase):
     database = db
     requires = [Register]
@@ -1166,7 +1108,9 @@ class TestServerSide(ModelTestCase):
             data = [row.value for row in ServerSide(query)]
             self.assertEqual(data, list(range(100)))
             self.assertEqual(len(events), 1)
-            self.assertTrue(events[0].sql.startswith('SELECT'))
+            self.assertEqual(events[0].sql, (
+                'SELECT "t1"."id", "t1"."value" FROM "register" AS "t1" '
+                'ORDER BY "t1"."value"'))
             self.assertIsNone(events[0].exception)
         finally:
             del self.database.query_hooks[:]
@@ -1221,66 +1165,6 @@ class TestServerSide(ModelTestCase):
         self.assertEqual(accum, list(range(25)))
 
 
-class KX(TestModel):
-    key = CharField(unique=True)
-    value = IntegerField()
-
-class TestAutocommitIntegration(ModelTestCase):
-    database = db
-    requires = [KX]
-
-    def setUp(self):
-        super(TestAutocommitIntegration, self).setUp()
-        with self.database.atomic():
-            kx1 = KX.create(key='k1', value=1)
-
-    def force_integrity_error(self):
-        # Force an integrity error, then verify that the current
-        # transaction has been aborted.
-        self.assertRaises(IntegrityError, KX.create, key='k1', value=10)
-
-    def test_autocommit_default(self):
-        kx2 = KX.create(key='k2', value=2)  # Will be committed.
-        self.assertTrue(kx2.id > 0)
-        self.force_integrity_error()
-
-        self.assertEqual(KX.select().count(), 2)
-        self.assertEqual([(kx.key, kx.value)
-                          for kx in KX.select().order_by(KX.key)],
-                         [('k1', 1), ('k2', 2)])
-
-    def test_autocommit_disabled(self):
-        with self.database.manual_commit():
-            self.database.begin()
-            kx2 = KX.create(key='k2', value=2)  # Not committed.
-            self.assertTrue(kx2.id > 0)  # Yes, we have a primary key.
-            self.force_integrity_error()
-            self.database.rollback()
-
-        self.assertEqual(KX.select().count(), 1)
-        kx1_db = KX.get(KX.key == 'k1')
-        self.assertEqual(kx1_db.value, 1)
-
-    def test_atomic_block(self):
-        with self.database.atomic() as txn:
-            kx2 = KX.create(key='k2', value=2)
-            self.assertTrue(kx2.id > 0)
-            self.force_integrity_error()
-            txn.rollback(False)
-
-        self.assertEqual(KX.select().count(), 1)
-        kx1_db = KX.get(KX.key == 'k1')
-        self.assertEqual(kx1_db.value, 1)
-
-    def test_atomic_block_exception(self):
-        with self.assertRaises(IntegrityError):
-            with self.database.atomic():
-                KX.create(key='k2', value=2)
-                KX.create(key='k1', value=10)
-
-        self.assertEqual(KX.select().count(), 1)
-
-
 class JDoc(TestModel):
     data = JSONField()
 
@@ -1314,232 +1198,3 @@ class TestJsonColumnTypes(ModelTestCase):
         JBDoc.create(data={'items': [1, 2, 3]})
         self.assertEqual(
             JBDoc.select(JBDoc.data['items'].length()).scalar(), 3)
-
-
-class KVC(TestModel):
-    key = TextField()
-    value = IntegerField()
-    class Meta:
-        primary_key = CompositeKey('key', 'value')
-
-
-class TestPostgresReturning(ModelTestCase):
-    database = db_loader('postgres')
-    requires = [KVC]
-
-    def test_insert_composite_pk(self):
-        iq = KVC.insert({'key': 'k1', 'value': 1})
-        self.assertEqual(iq.execute(), ('k1', 1))
-
-        iq = KVC.insert_many([('k2', 2), ('k3', 3)])
-        self.assertEqual(list(iq.execute()), [('k2', 2), ('k3', 3)])
-
-        iq = KVC.insert_many([('k4', 4), ('k5', 5)]).as_rowcount()
-        self.assertEqual(iq.execute(), 2)
-
-
-class TestTableInsertReturning(DatabaseTestCase):
-    database = db_loader('postgres')
-
-    def test_plain_table_insert_returning_pk(self):
-        self.database.execute_sql('drop table if exists t_pkstr')
-        self.database.execute_sql(
-            'create table t_pkstr (id serial primary key, x text)')
-        tbl = (Table('t_pkstr', ('id', 'x'), primary_key='id')
-               .bind(self.database))
-        self.assertEqual(tbl.insert({tbl.x: 'foo'}).execute(), 1)
-        self.assertEqual(tbl.insert({tbl.x: 'bar'}).execute(), 2)
-        self.database.execute_sql('drop table t_pkstr')
-
-
-class TestPostgresIsolationLevel(DatabaseTestCase):
-    # The integer constants differ between psycopg2 and psycopg3, so specify
-    # the level as a string and resolve via the adapter.
-    database = db_loader('postgres', isolation_level='SERIALIZABLE')
-
-    def test_isolation_level(self):
-        serializable = self.database._isolation_level
-        conn = self.database.connection()
-        self.assertEqual(conn.isolation_level, serializable)
-
-        with self.database.atomic():
-            curs = self.database.execute_sql(
-                'show transaction isolation level')
-            self.assertEqual(curs.fetchone()[0], 'serializable')
-
-        conn.set_isolation_level(2)
-        self.assertEqual(conn.isolation_level, 2)
-        self.database.close()
-
-        conn = self.database.connection()
-        self.assertEqual(conn.isolation_level, serializable)
-        self.database.close()
-
-        self.database.set_isolation_level(2)
-        for _ in range(2):
-            conn = self.database.connection()
-            self.assertEqual(conn.isolation_level, 2)
-            self.database.close()
-
-    def test_isolation_level_str(self):
-        db = db_loader('postgres', isolation_level='SERIALIZABLE')
-        conn = db.connection()
-        self.assertEqual(conn.isolation_level,
-                         db._adapter.isolation_levels_inv['SERIALIZABLE'])
-        db.close()
-
-        db.set_isolation_level('READ COMMITTED')
-        conn = db.connection()
-        self.assertEqual(conn.isolation_level,
-                         db._adapter.isolation_levels_inv['READ COMMITTED'])
-        db.close()
-
-    def test_isolation_level_mixed(self):
-        db = db_loader('postgres', isolation_level='SERIALIZABLE')
-        conn = db.connection()
-        self.assertEqual(conn.isolation_level,
-                         db._adapter.isolation_levels_inv['SERIALIZABLE'])
-        db.close()
-
-        rc = db._adapter.isolation_levels_inv['READ COMMITTED']
-        db.set_isolation_level(rc)
-        conn = db.connection()
-        self.assertEqual(conn.isolation_level, rc)
-        db.close()
-
-
-@skip_unless(pg12(), 'cte materialization requires pg >= 12')
-class TestPostgresCTEMaterialization(ModelTestCase):
-    database = db
-    requires = [Register]
-
-    def test_postgres_cte_materialization(self):
-        Register.insert_many([(i,) for i in (1, 2, 3)]).execute()
-
-        for materialized in (None, False, True):
-            cte = Register.select().cte('t', materialized=materialized)
-            query = (cte
-                     .select_from(cte.c.value)
-                     .where(cte.c.value != 2)
-                     .order_by(cte.c.value))
-            self.assertEqual([r.value for r in query], [1, 3])
-
-
-class TestPostgresLateralJoin(ModelTestCase):
-    database = db
-    test_data = (
-        ('a', (('a1', 1),
-               ('a2', 2),
-               ('a10', 10))),
-        ('b', (('b3', 3),
-               ('b4', 4),
-               ('b7', 7))),
-        ('c', ()))
-
-    def create_data(self):
-        ts = lambda d: datetime.datetime(2019, 1, d)
-        with self.database.atomic():
-            for username, tweets in self.test_data:
-                user = User.create(username=username)
-                for c, d in tweets:
-                    Tweet.create(user=user, content=c, timestamp=ts(d))
-
-    @requires_models(User, Tweet)
-    def test_lateral_top_n(self):
-        self.create_data()
-
-        subq = (Tweet
-                .select(Tweet.content, Tweet.timestamp)
-                .where(Tweet.user == User.id)
-                .order_by(Tweet.timestamp.desc())
-                .limit(2))
-        query = (User
-                 .select(User, subq.c.content)
-                 .join(subq, JOIN.LEFT_LATERAL)
-                 .order_by(subq.c.timestamp.desc(nulls='last')))
-        results = [(u.username, u.content) for u in query]
-        self.assertEqual(results, [
-            ('a', 'a10'),
-            ('b', 'b7'),
-            ('b', 'b4'),
-            ('a', 'a2'),
-            ('c', None)])
-
-        query = (Tweet
-                 .select(User.username, subq.c.content)
-                 .from_(User)
-                 .join(subq, JOIN.LEFT_LATERAL)
-                 .order_by(User.username, subq.c.timestamp))
-
-        results = [(t.username, t.content) for t in query]
-        self.assertEqual(results, [
-            ('a', 'a2'),
-            ('a', 'a10'),
-            ('b', 'b4'),
-            ('b', 'b7'),
-            ('c', None)])
-
-        # A user-supplied on= is honored rather than replaced with true. It
-        # filters the lateral's top-2 output, a1 was already cut by LIMIT.
-        query = (User
-                 .select(User.username, subq.c.content)
-                 .join(subq, JOIN.LEFT_LATERAL, on=(subq.c.content != 'a10'))
-                 .order_by(User.username, subq.c.timestamp))
-        results = [(u.username, u.content) for u in query]
-        self.assertEqual(results, [
-            ('a', 'a2'),
-            ('b', 'b4'),
-            ('b', 'b7'),
-            ('c', None)])
-
-    @requires_models(User, Tweet)
-    def test_full_join_no_related(self):
-        self.create_data()
-
-        query = (User
-                 .select(User, Tweet)
-                 .join(Tweet, JOIN.FULL, on=(Tweet.user == User.id))
-                 .order_by(User.username, Tweet.content))
-        # "FULL JOIN" nulls the tweet side for the tweet-less user ("c").
-        accum = [(u.username, u.tweet.content if u.tweet is not None else None)
-                 for u in query]
-        self.assertEqual(accum, [
-            ('a', 'a1'), ('a', 'a10'), ('a', 'a2'),
-            ('b', 'b3'), ('b', 'b4'), ('b', 'b7'),
-            ('c', None)])
-
-    @requires_models(User, Tweet)
-    def test_lateral_helper(self):
-        self.create_data()
-
-        subq = (Tweet
-                .select(Tweet.content, Tweet.timestamp)
-                .where(Tweet.user == User.id)
-                .order_by(Tweet.timestamp.desc())
-                .limit(2)
-                .lateral())
-
-        query = (User
-                 .select(User, subq.c.content)
-                 .join(subq, on=True)
-                 .order_by(subq.c.timestamp.desc(nulls='last')))
-        with self.assertQueryCount(1):
-            results = [(u.username, u.tweet.content) for u in query]
-            self.assertEqual(results, [
-                ('a', 'a10'),
-                ('b', 'b7'),
-                ('b', 'b4'),
-                ('a', 'a2')])
-
-        # on= may be omitted, it defaults to ON true.
-        query = (User
-                 .select(User, subq.c.content)
-                 .join(subq)
-                 .order_by(subq.c.timestamp.desc(nulls='last')))
-        with self.assertQueryCount(1):
-            results = [(u.username, u.tweet.content) for u in query]
-            self.assertEqual(results, [
-                ('a', 'a10'),
-                ('b', 'b7'),
-                ('b', 'b4'),
-                ('a', 'a2')])

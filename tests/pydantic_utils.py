@@ -13,7 +13,6 @@ from playhouse.pydantic_utils import to_pydantic
 from pydantic import BaseModel
 
 from .base import ModelDatabaseTestCase
-from .base import get_in_memory_db
 from .base import requires_models
 from .base import TestModel
 
@@ -34,6 +33,8 @@ class User(TestModel):
     created = DateTimeField(default=datetime.datetime.now)
 
 
+# Local pair on purpose. A Tweet with backref='tweets' against the base User
+# would overwrite User.tweets process-wide.
 class Tweet(TestModel):
     user = ForeignKeyField(User, backref='tweets')
     content = TextField()
@@ -61,11 +62,7 @@ class AllTypes(TestModel):
     f_char = CharField()
 
 
-class BasePydanticTestCase(ModelDatabaseTestCase):
-    database = get_in_memory_db()
-
-
-class TestPydanticConversion(BasePydanticTestCase):
+class TestPydanticConversion(ModelDatabaseTestCase):
     def test_conversion(self):
         Schema = to_pydantic(User)
         self.assertTrue(issubclass(Schema, BaseModel))
@@ -240,20 +237,6 @@ class TestPydanticConversion(BasePydanticTestCase):
         Schema = to_pydantic(User, include={'name', 'age'}, exclude={'age'})
         self.assertEqual(set(Schema.model_fields), {'name'})
 
-    def test_nullable_fields(self):
-        Schema = to_pydantic(User)
-        self.assertTrue(Schema.model_fields['name'].is_required())
-        self.assertTrue(Schema.model_fields['age'].is_required())
-
-        self.assertEqual(Schema.model_fields['bio'].default, None)
-        self.assertFalse(Schema.model_fields['bio'].is_required())
-
-        instance = Schema(name='a', age=1, status='active')
-        self.assertEqual(instance.score, 0.0)
-        self.assertIsNone(instance.bio)
-        self.assertEqual(instance.active, True)
-        self.assertIsInstance(instance.created, datetime.datetime)
-
     def test_schema_generation(self):
         for model in (User, Tweet, AllTypes):
             with self.subTest(model=model.__name__):
@@ -318,7 +301,7 @@ class TestPydanticConversion(BasePydanticTestCase):
         self.assertEqual(validated, v2)
 
 
-class TestRelationships(BasePydanticTestCase):
+class TestRelationships(ModelDatabaseTestCase):
     def test_nested_schema(self):
         UserSchema = to_pydantic(User, exclude_autofield=False)
         TweetResponse = to_pydantic(
@@ -460,7 +443,7 @@ class TestRelationships(BasePydanticTestCase):
             self.assertEqual([t.content for t in result.tweets], ['t0', 't1'])
 
 
-class TestMisc(BasePydanticTestCase):
+class TestMisc(ModelDatabaseTestCase):
     def test_fk_filter_by_either_name(self):
         # Plain FKs appear as the column name, so filtering accepts both
         # the field name and the column name.
@@ -486,7 +469,8 @@ class TestMisc(BasePydanticTestCase):
         self.assertIsInstance(f.default_factory(), datetime.datetime)
 
     def test_json_field_accepts_any(self):
-        class JDoc(TestModel):
+        # Unbound: conversion needs no db, and a sqlite bind checks 3.38.
+        class JDoc(Model):
             data = JSONField(null=True)
 
         S = to_pydantic(JDoc)

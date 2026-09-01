@@ -1,19 +1,18 @@
 import datetime
 
 from peers import *
-from playhouse.mysql_ext import JSONField
 from playhouse.mysql_ext import Match
 from playhouse.mysql_ext import MySQLJSONField
 
-from .base import IS_MYSQL_JSON
+from .base import BaseTestCase
 from .base import IS_MYSQL_JSON_OVERLAPS
-from .base import ModelDatabaseTestCase
 from .base import ModelTestCase
 from .base import TestModel
 from .base import db_loader
 from .base import requires_mysql
 from .base import skip_if
 from .base import skip_unless
+from .base_models import Person
 
 
 try:
@@ -30,21 +29,10 @@ except ImportError:
 mysql_ext_db = db_loader('mysqlconnector')
 
 
-class Person(TestModel):
-    first = CharField()
-    last = CharField()
-    dob = DateField(default=datetime.date(2000, 1, 1))
-
-
 class Note(TestModel):
     person = ForeignKeyField(Person, backref='notes')
     content = TextField()
     timestamp = DateTimeField(default=datetime.datetime.now)
-
-
-class KJ(TestModel):
-    key = CharField(primary_key=True, max_length=100)
-    data = JSONField()
 
 
 @requires_mysql
@@ -95,10 +83,7 @@ class TestMariaDBConnector(TestMySQLConnector):
     database = mariadb_db
 
 
-@requires_mysql
-class TestMatchExpression(ModelDatabaseTestCase):
-    requires = [Person]
-
+class TestMatchExpression(BaseTestCase):
     def test_match_expression(self):
         query = (Person
                  .select()
@@ -119,8 +104,12 @@ class TestMatchExpression(ModelDatabaseTestCase):
             'AGAINST(? IN BOOLEAN MODE)'), ['huey AND zaizee'])
 
 
+# Unbound at import: a JSONField binding to sqlite < 3.38 raises, and this
+# module is imported under every backend. setUp binds it to the mysql db.
 class OM(TestModel):
     data = MySQLJSONField()
+    class Meta:
+        database = None
 
 
 @requires_mysql

@@ -1,7 +1,7 @@
 from peers import *
 from playhouse import signals
 
-from .base import get_in_memory_db
+from .base import IS_MYSQL
 from .base import ModelTestCase
 
 
@@ -18,7 +18,6 @@ class SubB(B): pass
 
 
 class TestSignals(ModelTestCase):
-    database = get_in_memory_db()
     requires = [A, B, SubB]
 
     def tearDown(self):
@@ -39,7 +38,8 @@ class TestSignals(ModelTestCase):
         self.assertEqual(a.save(), 1)
         self.assertEqual(state, [(A, a, None, True)])
 
-        self.assertEqual(a.save(), 1)
+        # MySQL reports changed rows, so a save that changes nothing is 0.
+        self.assertEqual(a.save(), 0 if IS_MYSQL else 1)
         self.assertTrue(a.id is not None)
         self.assertEqual(len(state), 2)
         self.assertEqual(state[-1], (A, a, a.id, False))
@@ -213,7 +213,6 @@ class NoPK(BaseSignalModel):
 
 
 class TestSaveNoPrimaryKey(ModelTestCase):
-    database = get_in_memory_db()
     requires = [NoPK]
 
     def test_save_no_pk(self):

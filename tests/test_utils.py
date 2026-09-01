@@ -1,5 +1,3 @@
-import functools
-
 from .base import ModelTestCase
 from .base import TestModel
 
@@ -11,19 +9,9 @@ from playhouse.test_utils import count_queries
 class Data(TestModel):
     key = CharField()
 
-    class Meta:
-        order_by = ('key',)
-
-class DataItem(TestModel):
-    data = ForeignKeyField(Data, backref='items')
-    value = CharField()
-
-    class Meta:
-        order_by = ('value',)
-
 
 class TestQueryCounter(ModelTestCase):
-    requires = [DataItem, Data]
+    requires = [Data]
 
     def test_count(self):
         with count_queries() as count:

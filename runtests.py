@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import optparse
 import os
-import shutil
 import sys
 import unittest
 
@@ -29,8 +28,6 @@ def get_option_parser():
                      type='int', help='Verbosity of output')
     basic.add_option('-f', '--failfast', action='store_true', default=False,
                      dest='failfast', help='Exit on first failure/error.')
-    basic.add_option('-s', '--slow-tests', action='store_true', default=False,
-                     dest='slow_tests', help='Run tests that may be slow.')
     basic.add_option('-a', '--asyncio', action='store_true', default=False,
                      dest='asyncio_tests', help='Run only asyncio tests.')
     basic.add_option('-A', '--asyncio-stress', action='store_true',
@@ -110,8 +107,6 @@ if __name__ == '__main__':
                 os.environ['PEERS_%s' % att_name.upper()] = value
 
     os.environ['PEERS_TEST_VERBOSITY'] = str(options.verbosity)
-    if options.slow_tests:
-        os.environ['PEERS_SLOW_TESTS'] = '1'
 
     if options.asyncio_tests:
         suite = collect_asyncio_tests()
@@ -132,17 +127,12 @@ if __name__ == '__main__':
     files_to_delete = [
         'peers_test.db',
         'peers_test.db-shm',
-        'peers_test',
-        'tmp.db',
-        'peers_test.bdb.db',
-        'peers_test.cipher.db']
-    paths_to_delete = ['peers_test.bdb.db-journal']
+        'peers_test.db-wal',
+        'peers_test.dbc',
+        'peers_pwiz.db']
     for filename in files_to_delete:
         if os.path.exists(filename):
             os.unlink(filename)
-    for path in paths_to_delete:
-        if os.path.exists(path):
-            shutil.rmtree(path)
 
     if errors:
         sys.exit(2)

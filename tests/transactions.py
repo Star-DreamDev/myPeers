@@ -2,15 +2,8 @@
 Transaction semantics, savepoints, session management, and isolation level
 tests.
 
-All test cases use the Register model (a single IntegerField) from
+Most test cases use the Register model (a single IntegerField) from
 base_models, via BaseTransactionTestCase.
-
-Test case ordering:
-
-* Transaction commit/rollback, nesting, savepoints
-* Session (context manager) behavior
-* Lock type
-* Isolation level
 """
 import threading
 
@@ -23,8 +16,11 @@ from .base import IS_MYSQL
 from .base import IS_POSTGRESQL
 from .base import IS_SQLITE
 from .base import ModelTestCase
+from .base import TestModel
 from .base import db
+from .base import db_loader
 from .base import new_connection
+from .base import requires_postgresql
 from .base import skip_if
 from .base import skip_unless
 from .base_models import Register
@@ -514,6 +510,29 @@ class TestSession(BaseTransactionTestCase):
         self.assertTrue(db.session_rollback())
         self.assertRegister([1])
 
+    def test_session_state(self):
+        # When session is not active, commit and rollback have no effect.
+        self.assertFalse(self.database.in_transaction())
+        self.assertFalse(self.database.session_commit())
+        self.assertFalse(self.database.session_rollback())
+
+        tx = self.database.session_start()
+        self.assertTrue(self.database.in_transaction())
+        self.assertEqual(self.database.transaction_depth(), 1)
+
+        tx2 = self.database.session_start()
+        self.assertTrue(self.database.in_transaction())
+        self.assertEqual(self.database.transaction_depth(), 2)
+
+        self.assertTrue(self.database.top_transaction() is tx2)
+        self.assertTrue(self.database.session_commit())
+        self.assertTrue(self.database.top_transaction() is tx)
+        self.assertTrue(self.database.in_transaction())
+        self.assertEqual(self.database.transaction_depth(), 1)
+
+        self.assertTrue(self.database.session_rollback())
+        self.assertEqual(self.database.transaction_depth(), 0)
+
     def test_session_with_closed_db(self):
         db.close()
         self.assertTrue(db.session_start())
@@ -594,22 +613,86 @@ class TestSession(BaseTransactionTestCase):
 
 
 # ===========================================================================
-# Lock type and isolation level
+# Autocommit and manual-commit integration
 # ===========================================================================
 
-class TestBeginAutoconnect(BaseTransactionTestCase):
-    @skip_if(IS_CRDB, 'atomic() connects to read the server version')
-    def test_begin_autoconnect_false(self):
-        db = new_connection(autoconnect=False)
-        with self.assertRaises(InterfaceError):
-            with db.atomic():
-                pass
-        self.assertTrue(db.is_closed())
-        db.connect()
-        with db.atomic():
-            pass
-        db.close()
+class KX(TestModel):
+    key = CharField(unique=True)
+    value = IntegerField()
 
+class TestAutocommitIntegration(ModelTestCase):
+    database = db
+    requires = [KX]
+
+    def setUp(self):
+        super(TestAutocommitIntegration, self).setUp()
+        with self.database.atomic():
+            kx1 = KX.create(key='k1', value=1)
+
+    def force_integrity_error(self):
+        # Force an integrity error, then verify that the current
+        # transaction has been aborted.
+        self.assertRaises(IntegrityError, KX.create, key='k1', value=10)
+
+    def test_autocommit_default(self):
+        kx2 = KX.create(key='k2', value=2)  # Will be committed.
+        self.assertTrue(kx2.id > 0)
+        self.force_integrity_error()
+
+        self.assertEqual(KX.select().count(), 2)
+        self.assertEqual([(kx.key, kx.value)
+                          for kx in KX.select().order_by(KX.key)],
+                         [('k1', 1), ('k2', 2)])
+
+    def test_autocommit_disabled(self):
+        with self.database.manual_commit():
+            self.database.begin()
+            kx2 = KX.create(key='k2', value=2)  # Not committed.
+            self.assertTrue(kx2.id > 0)  # Yes, we have a primary key.
+            self.force_integrity_error()
+            self.database.rollback()
+
+        self.assertEqual(KX.select().count(), 1)
+        kx1_db = KX.get(KX.key == 'k1')
+        self.assertEqual(kx1_db.value, 1)
+
+    def test_atomic_block(self):
+        with self.database.atomic() as txn:
+            kx2 = KX.create(key='k2', value=2)
+            self.assertTrue(kx2.id > 0)
+            self.force_integrity_error()
+            # Restart after rollback so the block exit can commit on sqlite.
+            txn.rollback()
+
+        self.assertEqual(KX.select().count(), 1)
+        kx1_db = KX.get(KX.key == 'k1')
+        self.assertEqual(kx1_db.value, 1)
+
+    @requires_postgresql
+    def test_atomic_block_no_restart(self):
+        # Postgres tolerates the block-exit commit with no open transaction.
+        with self.database.atomic() as txn:
+            kx2 = KX.create(key='k2', value=2)
+            self.assertTrue(kx2.id > 0)
+            self.force_integrity_error()
+            txn.rollback(False)
+
+        self.assertEqual(KX.select().count(), 1)
+        kx1_db = KX.get(KX.key == 'k1')
+        self.assertEqual(kx1_db.value, 1)
+
+    def test_atomic_block_exception(self):
+        with self.assertRaises(IntegrityError):
+            with self.database.atomic():
+                KX.create(key='k2', value=2)
+                KX.create(key='k1', value=10)
+
+        self.assertEqual(KX.select().count(), 1)
+
+
+# ===========================================================================
+# Lock type and isolation level
+# ===========================================================================
 
 @skip_unless(IS_SQLITE, 'requires sqlite for transaction lock type')
 class TestTransactionLockType(BaseTransactionTestCase):
@@ -725,16 +808,58 @@ class TestTransactionIsolationLevel(BaseTransactionTestCase):
             self.assertEqual([r.value for r in q], vals)
 
 
-class TestConnectionContextDecorator(BaseTransactionTestCase):
-    def test_connection_context_as_decorator(self):
-        db2 = new_connection()
+@requires_postgresql
+class TestPostgresIsolationLevel(DatabaseTestCase):
+    # The integer constants differ between psycopg2 and psycopg3, so specify
+    # the level as a string and resolve via the adapter.
+    database = db_loader('postgres', isolation_level='SERIALIZABLE')
 
-        @db2.connection_context()
-        def do_work():
-            self.assertFalse(db2.is_closed())
-            return db2.execute_sql('SELECT 1').fetchone()
+    def test_isolation_level(self):
+        serializable = self.database._isolation_level
+        conn = self.database.connection()
+        self.assertEqual(conn.isolation_level, serializable)
 
-        self.assertTrue(db2.is_closed())
-        result = do_work()
-        self.assertEqual(result, (1,))
-        self.assertTrue(db2.is_closed())
+        with self.database.atomic():
+            curs = self.database.execute_sql(
+                'show transaction isolation level')
+            self.assertEqual(curs.fetchone()[0], 'serializable')
+
+        conn.set_isolation_level(2)
+        self.assertEqual(conn.isolation_level, 2)
+        self.database.close()
+
+        conn = self.database.connection()
+        self.assertEqual(conn.isolation_level, serializable)
+        self.database.close()
+
+        self.database.set_isolation_level(2)
+        for _ in range(2):
+            conn = self.database.connection()
+            self.assertEqual(conn.isolation_level, 2)
+            self.database.close()
+
+    def test_isolation_level_str(self):
+        db = db_loader('postgres', isolation_level='SERIALIZABLE')
+        conn = db.connection()
+        self.assertEqual(conn.isolation_level,
+                         db._adapter.isolation_levels_inv['SERIALIZABLE'])
+        db.close()
+
+        db.set_isolation_level('READ COMMITTED')
+        conn = db.connection()
+        self.assertEqual(conn.isolation_level,
+                         db._adapter.isolation_levels_inv['READ COMMITTED'])
+        db.close()
+
+    def test_isolation_level_mixed(self):
+        db = db_loader('postgres', isolation_level='SERIALIZABLE')
+        conn = db.connection()
+        self.assertEqual(conn.isolation_level,
+                         db._adapter.isolation_levels_inv['SERIALIZABLE'])
+        db.close()
+
+        rc = db._adapter.isolation_levels_inv['READ COMMITTED']
+        db.set_isolation_level(rc)
+        conn = db.connection()
+        self.assertEqual(conn.isolation_level, rc)
+        db.close()

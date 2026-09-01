@@ -2,20 +2,6 @@
 Field type tests: validation, conversion, storage, and retrieval for all
 field types, plus foreign key behavior, composite keys, and field-level
 constraints.
-
-Test case ordering:
-
-* Numeric and basic value types
-* Date/time fields
-* Foreign key basics and deferred FK resolution
-* Composite PK, field functions, IP, bit fields
-* Blob, Auto, BigAuto, UUID, timestamp, custom fields
-* String fields and misc field types
-* Virtual field behavior
-* Foreign key advanced: non-PK targets, multiple FKs, composite PK with FK
-* Search operators (regexp, contains)
-* Value conversion and type coercion
-* Regressions and edge cases
 """
 import calendar
 import datetime
@@ -41,17 +27,18 @@ from .base import IS_POSTGRESQL
 from .base import IS_SQLITE
 from .base import ModelTestCase
 from .base import TestModel
-from .base import db
 from .base import get_in_memory_db
 from .base import requires_models
 from .base import requires_mysql
 from .base import requires_pglike
+from .base import requires_postgresql
 from .base import requires_sqlite
 from .base import skip_if
 from .base_models import DfltM
 from .base_models import Note
+from .base_models import Package
+from .base_models import PackageItem
 from .base_models import Person
-from .base_models import Relationship
 from .base_models import Tweet
 from .base_models import User
 
@@ -84,17 +71,6 @@ class TestDefaultValuesFields(ModelTestCase):
         self.assertEqual(d.dflt2, 2)
         self.assertIsNone(d.dfltn)
         d.save()
-
-        d_db = DfltM.get(DfltM.id == d.id)
-        self.assertEqual(d_db.dflt1, 1)
-        self.assertEqual(d_db.dflt2, 2)
-        self.assertIsNone(d_db.dfltn)
-
-    def test_defaults_create(self):
-        d = DfltM.create(name='d1')
-        self.assertEqual(d.dflt1, 1)
-        self.assertEqual(d.dflt2, 2)
-        self.assertIsNone(d.dfltn)
 
         d_db = DfltM.get(DfltM.id == d.id)
         self.assertEqual(d_db.dflt1, 1)
@@ -248,7 +224,6 @@ class FC(TestModel):
 
 
 class TestFixedCharFieldIntegration(ModelTestCase):
-    database = get_in_memory_db()
     requires = [FC]
 
     def test_fixed_char_truncates(self):
@@ -943,8 +918,8 @@ class TestAutoField(ModelTestCase):
         a2_db = AFModel.get(AFModel.pk == a2.pk)
 
         self.assertTrue(a1_db.pk != a2_db.pk)
-        self.assertTrue(a1_db.data, 'a1')
-        self.assertTrue(a2_db.data, 'a2')
+        self.assertEqual(a1_db.data, 'a1')
+        self.assertEqual(a2_db.data, 'a2')
 
     def test_autofield_primary_key_false_error(self):
         self.assertRaises(ValueError, AutoField, primary_key=False)
@@ -972,8 +947,49 @@ class TestBigAutoField(ModelTestCase):
         b2_db = BigModel.get(BigModel.pk == b2.pk)
 
         self.assertTrue(b1_db.pk != b2_db.pk)
-        self.assertTrue(b1_db.data, 'b1')
-        self.assertTrue(b2_db.data, 'b2')
+        self.assertEqual(b1_db.data, 'b1')
+        self.assertEqual(b2_db.data, 'b2')
+
+
+class IDAlways(TestModel):
+    id = IdentityField(generate_always=True)
+    data = CharField()
+
+
+class IDByDefault(TestModel):
+    id = IdentityField()
+    data = CharField()
+
+
+@requires_postgresql
+class TestIdentityField(ModelTestCase):
+    requires = [IDAlways, IDByDefault]
+
+    def test_identity_field_always(self):
+        iq = IDAlways.insert_many([(d,) for d in ('d1', 'd2', 'd3')])
+        curs = iq.execute()
+        self.assertEqual(list(curs), [(1,), (2,), (3,)])
+
+        # Cannot specify id when generate always is true.
+        with self.assertRaises(ProgrammingError):
+            with self.database.atomic():
+                IDAlways.create(id=10, data='d10')
+
+        query = IDAlways.select().order_by(IDAlways.id)
+        self.assertEqual(list(query.tuples()), [
+            (1, 'd1'), (2, 'd2'), (3, 'd3')])
+
+    def test_identity_field_by_default(self):
+        iq = IDByDefault.insert_many([(d,) for d in ('d1', 'd2', 'd3')])
+        curs = iq.execute()
+        self.assertEqual(list(curs), [(1,), (2,), (3,)])
+
+        # May specify id when generate_always is false.
+        IDByDefault.create(id=10, data='d10')
+
+        query = IDByDefault.select().order_by(IDByDefault.id)
+        self.assertEqual(list(query.tuples()), [
+            (1, 'd1'), (2, 'd2'), (3, 'd3'), (10, 'd10')])
 
 
 class Item(TestModel):
@@ -1389,7 +1405,7 @@ class TestBitFields(ModelTestCase):
 
         # Out-of-bounds returns False and does not extend data.
         self.assertFalse(b.data.is_set(1000))
-        self.assertTrue(len(b.data), 1)
+        self.assertEqual(len(b.data), 1)
 
     def test_bigbit_item_methods(self):
         b = Bits()
@@ -1561,7 +1577,6 @@ class UpperModel(TestModel):
 
 
 class TestSQLFunctionDBValue(ModelTestCase):
-    database = get_in_memory_db()
     requires = [UpperModel]
 
     def test_sql_function_db_value(self):
@@ -1583,8 +1598,11 @@ class TestSQLFunctionDBValue(ModelTestCase):
         self.assertEqual(um_db3.id, um.id)
 
         # If we nest the field in a function, the conversion is not applied.
-        expr = fn.SUBSTR(UpperModel.name, 1, 1) == 'z'
-        self.assertRaises(UpperModel.DoesNotExist, UpperModel.get, expr)
+        # MySQL's ci collation matches 'Z' = 'z' either way, so the probe
+        # cannot tell the two cases apart there.
+        if not IS_MYSQL:
+            expr = fn.SUBSTR(UpperModel.name, 1, 1) == 'z'
+            self.assertRaises(UpperModel.DoesNotExist, UpperModel.get, expr)
 
 
 class VF(TestModel):
@@ -1610,13 +1628,13 @@ class TestVirtualFieldBehavior(BaseTestCase):
         self.assertEqual(vf.python_value('42'), 42)
 
 
-class TestTextField(TextField):
+class FirstCharTextField(TextField):
     def first_char(self):
         return fn.SUBSTR(self, 1, 1)
 
 
 class PhoneBook(TestModel):
-    name = TestTextField()
+    name = FirstCharTextField()
 
 
 class TestFieldFunction(ModelTestCase):
@@ -1654,7 +1672,6 @@ class DblSI(TestModel):
 
 
 class TestDoubleSmallInt(ModelTestCase):
-    database = get_in_memory_db()
     requires = [DblSI]
 
     def test_double_round_trip(self):
@@ -1671,6 +1688,9 @@ class TestDoubleSmallInt(ModelTestCase):
                    .tuples())
         self.assertEqual(list(results), [(-100,), (32000,)])
 
+    # Loose string-to-number coercion: mysql rejects inf, pg rejects '1.23'
+    # for a smallint. Both are sqlite behaviors.
+    @requires_sqlite
     def test_coercion(self):
         DblSI.create(df=float('inf'), si='42')
         obj = DblSI.get()
@@ -1721,6 +1741,72 @@ class TestSqliteAnyField(ModelTestCase):
 
     def test_any_field_ddl(self):
         self.assertSQL(AnyM.data.ddl(Context()), '"data" ANY')
+
+
+class Datum(TestModel):
+    a = BareField()
+    b = BareField(collation='BINARY')
+    c = BareField(collation='RTRIM')
+    d = BareField(collation='NOCASE')
+
+
+@requires_sqlite
+class TestCollatedFieldDefinitions(ModelTestCase):
+    # BareField and COLLATE definitions are sqlite-only.
+    database = get_in_memory_db()
+    requires = [Datum]
+
+    def test_collated_fields(self):
+        rows = (
+            (1, 'abc', 'abc',  'abc  ', 'abc'),
+            (2, 'abc', 'abc',  'abc',   'ABC'),
+            (3, 'abc', 'abc',  'abc ',  'Abc'),
+            (4, 'abc', 'abc ', 'ABC',   'abc'))
+        for pk, a, b, c, d in rows:
+            Datum.create(id=pk, a=a, b=b, c=c, d=d)
+
+        def assertC(query, expected):
+            self.assertEqual([r.id for r in query], expected)
+
+        base = Datum.select().order_by(Datum.id)
+
+        # Text comparison a=b is performed using binary collating sequence.
+        assertC(base.where(Datum.a == Datum.b), [1, 2, 3])
+
+        # Text comparison a=b is performed using the RTRIM collating sequence.
+        assertC(base.where(Datum.a == Datum.b.collate('RTRIM')), [1, 2, 3, 4])
+
+        # Text comparison d=a is performed using the NOCASE collating sequence.
+        assertC(base.where(Datum.d == Datum.a), [1, 2, 3, 4])
+
+        # Text comparison a=d is performed using the BINARY collating sequence.
+        assertC(base.where(Datum.a == Datum.d), [1, 4])
+
+        # Text comparison 'abc'=c is performed using RTRIM collating sequence.
+        assertC(base.where('abc' == Datum.c), [1, 2, 3])
+
+        # Text comparison c='abc' is performed using RTRIM collating sequence.
+        assertC(base.where(Datum.c == 'abc'), [1, 2, 3])
+
+        # Grouping is performed using the NOCASE collating sequence (Values
+        # 'abc', 'ABC', and 'Abc' are placed in the same group).
+        query = Datum.select(fn.COUNT(Datum.id)).group_by(Datum.d)
+        self.assertEqual(query.scalar(), 4)
+
+        # Grouping is performed using the BINARY collating sequence.  'abc' and
+        # 'ABC' and 'Abc' form different groups.
+        query = Datum.select(fn.COUNT(Datum.id)).group_by(Datum.d.concat(''))
+        self.assertEqual([r[0] for r in query.tuples()], [1, 1, 2])
+
+        # Sorting or column c is performed using the RTRIM collating sequence.
+        assertC(base.order_by(Datum.c, Datum.id), [4, 1, 2, 3])
+
+        # Sorting of (c||'') is performed using the BINARY collating sequence.
+        assertC(base.order_by(Datum.c.concat(''), Datum.id), [4, 2, 3, 1])
+
+        # Sorting of column c is performed using the NOCASE collating sequence.
+        assertC(base.order_by(Datum.c.collate('NOCASE'), Datum.id),
+                [2, 4, 3, 1])
 
 
 # ===========================================================================
@@ -1815,6 +1901,52 @@ class TestForeignKeyField(ModelTestCase):
             ('u3', 3)])
 
 
+class TestForeignKeyFieldDescriptors(BaseTestCase):
+    def test_foreign_key_field_descriptors(self):
+        class User(Model): pass
+        class T0(Model):
+            user = ForeignKeyField(User)
+        class T1(Model):
+            user = ForeignKeyField(User, column_name='uid')
+        class T2(Model):
+            user = ForeignKeyField(User, object_id_name='uid')
+        class T3(Model):
+            user = ForeignKeyField(User, column_name='x', object_id_name='uid')
+        class T4(Model):
+            foo = ForeignKeyField(User, column_name='user')
+        class T5(Model):
+            foo = ForeignKeyField(User, object_id_name='uid')
+
+        self.assertEqual(T0.user.object_id_name, 'user_id')
+        self.assertEqual(T1.user.object_id_name, 'uid')
+        self.assertEqual(T2.user.object_id_name, 'uid')
+        self.assertEqual(T3.user.object_id_name, 'uid')
+        self.assertEqual(T4.foo.object_id_name, 'user')
+        self.assertEqual(T5.foo.object_id_name, 'uid')
+
+        user = User(id=1337)
+        self.assertEqual(T0(user=user).user_id, 1337)
+        self.assertEqual(T1(user=user).uid, 1337)
+        self.assertEqual(T2(user=user).uid, 1337)
+        self.assertEqual(T3(user=user).uid, 1337)
+        self.assertEqual(T4(foo=user).user, 1337)
+        self.assertEqual(T5(foo=user).uid, 1337)
+
+        def conflicts_with_field():
+            class TE(Model):
+                user = ForeignKeyField(User, object_id_name='user')
+
+        self.assertRaises(ValueError, conflicts_with_field)
+
+    def test_column_name(self):
+        class User(Model): pass
+        class T1(Model):
+            user = ForeignKeyField(User, column_name='user')
+
+        self.assertEqual(T1.user.column_name, 'user')
+        self.assertEqual(T1.user.object_id_name, 'user_id')
+
+
 class M1(TestModel):
     name = CharField(primary_key=True)
     m2 = DeferredForeignKey('M2', deferrable='INITIALLY DEFERRED',
@@ -1842,14 +1974,44 @@ class TestDeferredForeignKey(ModelTestCase):
         m2_db = M2.get(M2.name == 'm2')
         self.assertEqual(m2_db.m1.name, 'm1')
 
+    @skip_if(IS_SQLITE, 'sqlite is not supported')
+    def test_deferred_fk_creation(self):
+        class B(TestModel):
+            a = DeferredForeignKey('A', null=True)
+            b = TextField()
+        class A(TestModel):
+            a = TextField()
 
-class Composite(TestModel):
-    first = CharField()
-    last = CharField()
-    data = TextField()
+        self.database.create_tables([A, B])
 
-    class Meta:
-        primary_key = CompositeKey('first', 'last')
+        try:
+            # Test that we can create B with null "a_id" column:
+            a = A.create(a='a')
+            b = B.create(b='b')
+
+            # Test that we can create B that has no corresponding A:
+            fake_a = A(id=31337)
+            b2 = B.create(a=fake_a, b='b2')
+            b2_db = B.get(B.a == fake_a)
+            self.assertEqual(b2_db.b, 'b2')
+
+            # Ensure error occurs trying to create_foreign_key.
+            with self.database.atomic():
+                self.assertRaises(
+                    IntegrityError,
+                    B._schema.create_foreign_key,
+                    B.a)
+
+            b2_db.delete_instance()
+
+            # We can now create the foreign key.
+            B._schema.create_foreign_key(B.a)
+
+            # The foreign-key is enforced:
+            with self.database.atomic():
+                self.assertRaises(IntegrityError, B.create, a=fake_a, b='b3')
+        finally:
+            self.database.drop_tables([A, B])
 
 
 class TestDeferredForeignKeyResolution(ModelTestCase):
@@ -1913,8 +2075,23 @@ class TestDeferredForeignKeyResolution(ModelTestCase):
             'SELECT "t1"."id", "t1"."id_album", "t1"."id_Alt_album" '
             'FROM "photo" AS "t1" WHERE ("t1"."id_Alt_album" = ?)'), [4])
 
+    def test_deferred_fk(self):
+        class Note(TestModel):
+            foo = DeferredForeignKey('Foo', backref='notes')
+
+        class Foo(TestModel):
+            note = ForeignKeyField(Note)
+
+        self.assertTrue(Note.foo.rel_model is Foo)
+        self.assertTrue(Foo.note.rel_model is Note)
+        f = Foo(id=1337)
+        self.assertSQL(f.notes, (
+            'SELECT "t1"."id", "t1"."foo_id" FROM "note" AS "t1" '
+            'WHERE ("t1"."foo_id" = ?)'), [1337])
+
 
 class TestDeferredForeignKeyIntegration(ModelTestCase):
+    # Binds inline models for their DDL, nothing executes.
     database = get_in_memory_db()
 
     def test_deferred_fk_simple(self):
@@ -2064,15 +2241,6 @@ class TestForeignKeyLazyLoad(ModelTestCase):
             self.assertTrue(bi.nq_lazy_null is None)
 
 
-class Package(TestModel):
-    barcode = CharField(unique=True)
-
-
-class PackageItem(TestModel):
-    title = CharField()
-    package = ForeignKeyField(Package, Package.barcode, backref='items')
-
-
 class TestForeignKeyToNonPrimaryKey(ModelTestCase):
     requires = [Package, PackageItem]
 
@@ -2084,177 +2252,30 @@ class TestForeignKeyToNonPrimaryKey(ModelTestCase):
             for i in range(2):
                 PackageItem.create(
                     package=barcode,
-                    title='%s-%s' % (barcode, i))
+                    name='%s-%s' % (barcode, i))
 
     def test_fk_resolution(self):
-        pi = PackageItem.get(PackageItem.title == '101-0')
+        pi = PackageItem.get(PackageItem.name == '101-0')
         self.assertEqual(pi.__data__['package'], '101')
         self.assertEqual(pi.package, Package.get(Package.barcode == '101'))
 
     def test_select_generation(self):
         p = Package.get(Package.barcode == '101')
         self.assertEqual(
-            [item.title for item in p.items.order_by(PackageItem.title)],
+            [item.name for item in p.items.order_by(PackageItem.name)],
             ['101-0', '101-1'])
 
     def test_joining(self):
         q = (PackageItem
              .select(PackageItem, Package)
              .join(Package)
-             .order_by(PackageItem.title))
+             .order_by(PackageItem.name))
         with self.assertQueryCount(1):
-            self.assertEqual([(pi.title, pi.package.barcode) for pi in q], [
+            self.assertEqual([(pi.name, pi.package.barcode) for pi in q], [
                 ('101-0', '101'),
                 ('101-1', '101'),
                 ('102-0', '102'),
                 ('102-1', '102')])
-
-
-class Manufacturer(TestModel):
-    name = CharField()
-
-
-class Component(TestModel):
-    name = CharField()
-    manufacturer = ForeignKeyField(Manufacturer, null=True)
-
-
-class Computer(TestModel):
-    hard_drive = ForeignKeyField(Component, backref='c1')
-    memory = ForeignKeyField(Component, backref='c2')
-    processor = ForeignKeyField(Component, backref='c3')
-
-
-class TestMultipleForeignKey(ModelTestCase):
-    requires = [Manufacturer, Component, Computer]
-    test_values = [
-        ['3TB', '16GB', 'i7'],
-        ['128GB', '1GB', 'ARM'],
-    ]
-
-    def setUp(self):
-        super(TestMultipleForeignKey, self).setUp()
-        intel = Manufacturer.create(name='Intel')
-        amd = Manufacturer.create(name='AMD')
-        kingston = Manufacturer.create(name='Kingston')
-        for hard_drive, memory, processor in self.test_values:
-            c = Computer.create(
-                hard_drive=Component.create(name=hard_drive),
-                memory=Component.create(name=memory, manufacturer=kingston),
-                processor=Component.create(name=processor, manufacturer=intel))
-
-        # The 2nd computer has an AMD processor.
-        c.processor.manufacturer = amd
-        c.processor.save()
-
-    def test_multi_join(self):
-        HDD = Component.alias('hdd')
-        HDDMf = Manufacturer.alias('hddm')
-        Memory = Component.alias('mem')
-        MemoryMf = Manufacturer.alias('memm')
-        Processor = Component.alias('proc')
-        ProcessorMf = Manufacturer.alias('procm')
-        query = (Computer
-                 .select(
-                     Computer,
-                     HDD,
-                     Memory,
-                     Processor,
-                     HDDMf,
-                     MemoryMf,
-                     ProcessorMf)
-                 .join(HDD, on=(
-                     Computer.hard_drive_id == HDD.id).alias('hard_drive'))
-                 .join(
-                     HDDMf,
-                     JOIN.LEFT_OUTER,
-                     on=(HDD.manufacturer_id == HDDMf.id))
-                 .switch(Computer)
-                 .join(Memory, on=(
-                     Computer.memory_id == Memory.id).alias('memory'))
-                 .join(
-                     MemoryMf,
-                     JOIN.LEFT_OUTER,
-                     on=(Memory.manufacturer_id == MemoryMf.id))
-                 .switch(Computer)
-                 .join(Processor, on=(
-                     Computer.processor_id == Processor.id).alias('processor'))
-                 .join(
-                     ProcessorMf,
-                     JOIN.LEFT_OUTER,
-                     on=(Processor.manufacturer_id == ProcessorMf.id))
-                 .order_by(Computer.id))
-
-        with self.assertQueryCount(1):
-            vals = []
-            manufacturers = []
-            for computer in query:
-                components = [
-                    computer.hard_drive,
-                    computer.memory,
-                    computer.processor]
-                vals.append([component.name for component in components])
-                for component in components:
-                    if component.manufacturer:
-                        manufacturers.append(component.manufacturer.name)
-                    else:
-                        manufacturers.append(None)
-
-            self.assertEqual(vals, self.test_values)
-            self.assertEqual(manufacturers, [
-                None, 'Kingston', 'Intel',
-                None, 'Kingston', 'AMD',
-            ])
-
-
-class TestMultipleForeignKeysJoining(ModelTestCase):
-    requires = [Person, Relationship]
-
-    def test_multiple_fks(self):
-        a = Person.create(first='a', last='l')
-        b = Person.create(first='b', last='l')
-        c = Person.create(first='c', last='l')
-
-        self.assertEqual(list(a.relations), [])
-        self.assertEqual(list(a.related_to), [])
-
-        r_ab = Relationship.create(from_person=a, to_person=b)
-        self.assertEqual(list(a.relations), [r_ab])
-        self.assertEqual(list(a.related_to), [])
-        self.assertEqual(list(b.relations), [])
-        self.assertEqual(list(b.related_to), [r_ab])
-
-        r_bc = Relationship.create(from_person=b, to_person=c)
-
-        following = Person.select().join(
-            Relationship, on=Relationship.to_person
-        ).where(Relationship.from_person == a)
-        self.assertEqual(list(following), [b])
-
-        followers = Person.select().join(
-            Relationship, on=Relationship.from_person
-        ).where(Relationship.to_person == a.id)
-        self.assertEqual(list(followers), [])
-
-        following = Person.select().join(
-            Relationship, on=Relationship.to_person
-        ).where(Relationship.from_person == b.id)
-        self.assertEqual(list(following), [c])
-
-        followers = Person.select().join(
-            Relationship, on=Relationship.from_person
-        ).where(Relationship.to_person == b.id)
-        self.assertEqual(list(followers), [a])
-
-        following = Person.select().join(
-            Relationship, on=Relationship.to_person
-        ).where(Relationship.from_person == c.id)
-        self.assertEqual(list(following), [])
-
-        followers = Person.select().join(
-            Relationship, on=Relationship.from_person
-        ).where(Relationship.to_person == c.id)
-        self.assertEqual(list(followers), [b])
 
 
 class TestForeignKeyConstraints(ModelTestCase):
@@ -2282,6 +2303,7 @@ class TestForeignKeyConstraints(ModelTestCase):
     def test_disable_constraint(self):
         self.set_foreign_key_pragma(False)
         Note.create(author=0, content='test')
+        self.assertEqual(Note.select().count(), 1)
 
 
 class FK_A(TestModel):
@@ -2376,7 +2398,7 @@ class TestQueryWithModelInstanceParam(ModelTestCase):
         # Ensure that UPDATE works as expected as well.
         b1.save()
 
-        # See also keys.TestFKtoNonPKField test, which replicates much of this.
+        # See also TestFKtoNonPKField above, which replicates much of this.
         args = (b1.fk_a_1, b1.fk_a_1_id, a1, a1.key)
         for arg in args:
             query = FKF_B.select().where(FKF_B.fk_a_1 == arg)
@@ -2427,10 +2449,6 @@ class TagPostThrough(TestModel):
     class Meta:
         primary_key = CompositeKey('tag', 'post')
 
-class TagPostThroughAlt(TestModel):
-    tag = ForeignKeyField(Tag, backref='posts_alt')
-    post = ForeignKeyField(Post, backref='tags_alt')
-
 class DIParent(TestModel):
     title = CharField()
 
@@ -2454,18 +2472,6 @@ class TestCompositePrimaryKey(ModelTestCase):
             TagPostThrough.create(tag=t, post=p)
         TagPostThrough.create(tag=tags[0], post=p12)
         TagPostThrough.create(tag=tags[1], post=p12)
-
-    def test_create_table_query(self):
-        query, params = TagPostThrough._schema._create_table().query()
-        sql = ('CREATE TABLE IF NOT EXISTS "tag_post_through" ('
-               '"tag_id" INTEGER NOT NULL, '
-               '"post_id" INTEGER NOT NULL, '
-               'PRIMARY KEY ("tag_id", "post_id"), '
-               'FOREIGN KEY ("tag_id") REFERENCES "tag" ("id"), '
-               'FOREIGN KEY ("post_id") REFERENCES "post" ("id"))')
-        if IS_MYSQL:
-            sql = sql.replace('"', '`')
-        self.assertEqual(query, sql)
 
     def test_get_set_id(self):
         tpt = (TagPostThrough
@@ -2580,31 +2586,6 @@ class TestCompositePrimaryKey(ModelTestCase):
             [x.data for x in DIChild.select().order_by(DIChild.data)],
             ['m2'])
 
-    def test_composite_key_inheritance(self):
-        class Person(TestModel):
-            first = TextField()
-            last = TextField()
-
-            class Meta:
-                primary_key = CompositeKey('first', 'last')
-
-        self.assertTrue(isinstance(Person._meta.primary_key, CompositeKey))
-        self.assertEqual(Person._meta.primary_key.field_names,
-                         ('first', 'last'))
-
-        class Employee(Person):
-            title = TextField()
-
-        self.assertTrue(isinstance(Employee._meta.primary_key, CompositeKey))
-        self.assertEqual(Employee._meta.primary_key.field_names,
-                         ('first', 'last'))
-        sql = ('CREATE TABLE IF NOT EXISTS "employee" ('
-               '"first" TEXT NOT NULL, "last" TEXT NOT NULL, '
-               '"title" TEXT NOT NULL, PRIMARY KEY ("first", "last"))')
-        if IS_MYSQL:
-            sql = sql.replace('"', '`')
-        self.assertEqual(Employee._schema._create_table().query(), (sql, []))
-
 
 class Product(TestModel):
     id = CharField()
@@ -2713,6 +2694,7 @@ class TestCompositePKwithFK(ModelTestCase):
 # ===========================================================================
 
 class TestValueConversion(ModelTestCase):
+    # In-memory pin: the asserted INSERT gains RETURNING on the shared pg db.
     database = get_in_memory_db()
     requires = [UpperModel]
 
@@ -3049,3 +3031,19 @@ class TestFieldAccessorEdgeCases(BaseTestCase):
         u = User()
         u.__data__ = {}
         self.assertIsNone(u.username)
+
+
+class TestSafePythonValueFailure(BaseTestCase):
+    def test_safe_python_value_catches_error(self):
+        from peers import safe_python_value
+        def bad_converter(value):
+            raise ValueError('bad')
+        safe = safe_python_value(bad_converter)
+        # Should NOT raise - returns the raw value instead.
+        result = safe('hello')
+        self.assertEqual(result, 'hello')
+
+    def test_safe_python_value_passes_through_success(self):
+        from peers import safe_python_value
+        safe = safe_python_value(int)
+        self.assertEqual(safe('42'), 42)

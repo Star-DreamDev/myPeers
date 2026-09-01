@@ -214,7 +214,7 @@ class TestSchemaDiff(ModelTestCase):
         # Present on both sides: matched by name.
         self.assertFalse(diff_models(self.database, [SdPartial]))
 
-        # Missing from the database: suggested by name, no details carried.
+        # Missing from the database: suggested by name, with no details.
         self.database.execute_sql('DROP INDEX sd_partial_flags')
         diff = diff_models(self.database, [SdPartial])
         self.assertEqual(diff.add_indexes,
@@ -337,7 +337,7 @@ def down(migrator, db):
     migrator.migrate(migrator.drop_table('sd_owned'))
 """
 
-# Added fks render runnable against stubs, with the target field spelled
+# Added fks render runnable against stubs, with the target field written
 # out (add_column fields never get bound). index=True, the fk default,
 # stays out: add_column() indexes the column itself. down() still drops
 # the indexes before the columns. The not-null add gets a TODO, since
@@ -372,7 +372,7 @@ def down(migrator, db):
     migrator.migrate(migrator.drop_column('sd_tweet', 'editor_id'))
 """
 
-# Fk kwargs: on_delete carries over, a non-pk target renders field=, a
+# Fk kwargs: on_delete is preserved, a non-pk target renders field=, a
 # target created in the same diff is referenced directly (dependency
 # order), and a self-reference stays 'self'.
 FK_KWARGS_BODY = """\
@@ -520,7 +520,7 @@ def down(migrator, db):
     migrator.migrate(migrator.drop_table('sd_common_defaults'))
 """
 
-# A field class from outside core peers carries its import.
+# A field class from outside core peers brings its own import.
 IMPORT_BODY = """\
 from peers import *
 from playhouse.sqlite_ext import JSONField
@@ -554,6 +554,41 @@ def up(migrator, db):
 
 def down(migrator, db):
     migrator.migrate(migrator.drop_table('sd_enum'))
+"""
+
+ADDED_INDEXED_COLUMN_BODY = """\
+from peers import *
+
+def up(migrator, db):
+    migrator.migrate(migrator.add_column('sd_user', 'karma', IntegerField(index=True, default=0)))
+
+
+def down(migrator, db):
+    migrator.migrate(migrator.drop_index('sd_user', 'sd_user_karma'))
+    migrator.migrate(migrator.drop_column('sd_user', 'karma'))
+"""
+
+FK_STUB_PK_FK_BODY = """\
+from peers import *
+
+def up(migrator, db):
+    class SdSettings(Model):
+        account = IntegerField(primary_key=True, column_name='account_id')
+        class Meta:
+            database = db
+            table_name = 'sd_settings'
+
+    class SdTheme(Model):
+        settings = ForeignKeyField(SdSettings)
+        name = CharField()
+        class Meta:
+            database = db
+            table_name = 'sd_theme'
+    db.create_tables([SdTheme])
+
+
+def down(migrator, db):
+    migrator.migrate(migrator.drop_table('sd_theme'))
 """
 
 @skip_if(IS_CRDB, 'crdb introspection differs')
@@ -777,9 +812,9 @@ class TestTemplateRoundTrip(ModelTestCase):
         self.assertFalse(diff_models(self.database, SD_MODELS))
 
     def test_added_indexed_column(self):
-        # add_column() creates the field's index itself, so up() carries
-        # no separate add_index. down() must still drop the index before
-        # the column or sqlite refuses the drop.
+        # add_column() creates the field's index itself, so up() needs no
+        # separate add_index. down() must still drop the index before the
+        # column or sqlite refuses the drop.
         class SdUserKarma(TestModel):
             username = CharField(unique=True)
             email = CharField(index=True)
@@ -790,8 +825,7 @@ class TestTemplateRoundTrip(ModelTestCase):
 
         models = [SdUserKarma, SdTweet, SdPoints]
         body = template(diff_models(self.database, models))
-        self.assertIn("add_column('sd_user', 'karma', "
-                      "IntegerField(index=True, default=0))", body)
+        self.assertEqual(strip_header(body), ADDED_INDEXED_COLUMN_BODY)
 
         self.apply(body, 'karma')
         self.assertFalse(diff_models(self.database, models))
@@ -856,8 +890,7 @@ class TestTemplateRoundTrip(ModelTestCase):
 
         models = [SdTheme, SdSettings, SdAccount] + SD_MODELS
         body = template(diff_models(self.database, models))
-        self.assertIn("account = IntegerField(primary_key=True, "
-                      "column_name='account_id')", body)
+        self.assertEqual(strip_header(body), FK_STUB_PK_FK_BODY)
         self.apply(body, 'theme')
         self.assertFalse(diff_models(self.database, models))
 

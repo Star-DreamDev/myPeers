@@ -420,7 +420,7 @@ class BaseBinaryJsonFieldTestCase(BaseJsonFieldTestCase):
         self.assertEqual(b1.id, b1_id_db)
 
         b1_db = self.M.get(self.M.id == b1.id)
-        self.assertEqual(self.M.data, {'k1': 'v1-z'})
+        self.assertEqual(b1_db.data, {'k1': 'v1-z'})
 
         iq = (self.M
               .insert(id=b1.id, data={'k1': 'v1-y'})
@@ -430,6 +430,6 @@ class BaseBinaryJsonFieldTestCase(BaseJsonFieldTestCase):
         self.assertEqual(b1.id, b1_id_db)
 
         b1_db = self.M.get(self.M.id == b1.id)
-        self.assertEqual(self.M.data, {'k1': 'v1-w'})
+        self.assertEqual(b1_db.data, {'k1': 'v1-w'})
 
         self.assertEqual(self.M.select().count(), 1)

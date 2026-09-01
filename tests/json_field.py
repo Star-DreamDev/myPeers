@@ -1,7 +1,6 @@
 import json
 
 from peers import *
-from peers import sqlite3
 
 from .base import IS_CRDB
 from .base import IS_MARIADB
@@ -14,11 +13,7 @@ from .base import ModelTestCase
 from .base import TestModel
 from .base import db
 from .base import skip_if
-from .base import skip_unless
 
-
-IS_SQLITE_38 = IS_SQLITE and sqlite3.sqlite_version_info >= (3, 38)
-SKIP_PATHS = IS_SQLITE and not IS_SQLITE_38
 
 # CockroachDB rides PostgresqlJSONMethods (and psycopg), so it gets the
 # postgres-flavored behaviors and SQL shapes in these tests.
@@ -119,7 +114,7 @@ class TestValueMatrix(ModelTestCase):
                 self._check_filter(label, value)
 
     def test_sqlite_float_infinity(self):
-        # SQLite's JSON1 tolerates non-finite floats; PG and MySQL reject them
+        # SQLite's JSON1 tolerates non-finite floats. PG and MySQL reject them
         # via the dumps step (json.dumps default allow_nan=True but the driver
         # rejects them at parse time).
         if not IS_SQLITE:
@@ -130,7 +125,6 @@ class TestValueMatrix(ModelTestCase):
             self.assertEqual(JM.select().get().data, v)
 
 
-@skip_if(SKIP_PATHS, 'requires SQLite 3.38 or non-SQLite backend')
 class TestPathExtract(ModelTestCase):
     requires = [JM]
 
@@ -196,8 +190,8 @@ class TestPathExtract(ModelTestCase):
             '["cat", "white", "fluffy"]'))
 
     def test_path_equiv(self):
-        v1 = JM.select(JM.data.path('profile', 'city')).scalar()
-        v2 = JM.select(JM.data['profile']['city']).scalar()
+        v1 = JM.select(JM.data.path('profile', 'location')).scalar()
+        v2 = JM.select(JM.data['profile']['location']).scalar()
         self.assertEqual(v1, v2)
 
     def test_empty_path(self):
@@ -212,7 +206,6 @@ class TestPathExtract(ModelTestCase):
         self.assertEqual(list(q.tuples()), [('huey', [1, 2])])
 
 
-@skip_if(SKIP_PATHS, 'requires SQLite 3.38 or non-SQLite backend')
 class TestEquality(ModelTestCase):
     requires = [JM]
 
@@ -264,7 +257,6 @@ class TestEquality(ModelTestCase):
         self.assertEqual(q.count(), 1)
 
 
-@skip_if(SKIP_PATHS, 'requires SQLite 3.38 or non-SQLite backend')
 class TestContainerEquality(ModelTestCase):
     requires = [JM]
 
@@ -287,7 +279,7 @@ class TestContainerEquality(ModelTestCase):
 
     def test_path_eq_after_mutation(self):
         # Mutation ops rewrite the document server-side, so the stored text
-        # no longer carries the original dumps() formatting - equality must
+        # no longer keeps the original dumps() formatting - equality must
         # not depend on it surviving (MariaDB byte-compares text).
         JM.create(data={'k': 'placeholder'}, ident='t')
         JM.update(data=JM.data['k'].set({'a': 1, 'b': [2, 3]})).execute()
@@ -304,7 +296,6 @@ class TestContainerEquality(ModelTestCase):
         self.assertEqual([r.ident for r in q], ['t1', 't2'])
 
 
-@skip_if(SKIP_PATHS, 'requires SQLite 3.38 or non-SQLite backend')
 class TestTypedCasts(ModelTestCase):
     requires = [JM]
 
@@ -365,7 +356,6 @@ class TestReadModifyWrite(ModelTestCase):
         self.assertEqual(JM.get_by_id(m.id).data, {'new': 2})
 
 
-@skip_if(SKIP_PATHS, 'requires SQLite 3.38 or non-SQLite backend')
 class TestAtomicViaFn(ModelTestCase):
     requires = [JM]
 
@@ -429,8 +419,8 @@ class TestCustomLoads(ModelTestCase):
             ML.create(data={'n': 5})
             got = ML.select().first().data
             if IS_PG_JSON:
-                # psycopg deserializes json values itself; a custom loads
-                # is not applied (see docs).
+                # psycopg deserializes json values itself. A custom loads is
+                # not applied (see docs).
                 self.assertEqual(got, {'n': 5})
             else:
                 self.assertEqual(got, {'n': 500})
@@ -469,7 +459,6 @@ class TestJSONFieldDeferredDatabase(ModelTestCase):
         self.test_proxy_initialize(init_early=True)
 
 
-@skip_if(SKIP_PATHS, 'requires SQLite 3.38 or non-SQLite backend')
 class TestInheritedJSONField(ModelTestCase):
     requires = []
 
@@ -502,7 +491,6 @@ class TestInheritedJSONField(ModelTestCase):
         self.assertIs(deepcopy(db), db)
 
 
-@skip_if(SKIP_PATHS, 'requires SQLite 3.38 or non-SQLite backend')
 class TestNullSemantics(ModelTestCase):
     requires = [JM]
 
@@ -603,7 +591,6 @@ class TestNullSemantics(ModelTestCase):
         self.assertEqual(ids, [self.r_json_null])
 
 
-@skip_if(SKIP_PATHS, 'requires SQLite 3.38 or non-SQLite backend')
 class TestAsTextDeep(ModelTestCase):
     requires = [JM]
 
@@ -659,7 +646,7 @@ class TestAsTextDeep(ModelTestCase):
         self.assertEqual(names, ['apple', 'banana', 'cherry'])
 
     def test_as_text_returns_string_for_number(self):
-        # Stored JSON int. Text extract returns the text form on PG/MySQL;
+        # Stored JSON int. Text extract returns the text form on PG/MySQL.
         # SQLite returns the SQL value (loose). Both compare to a numeric
         # equivalent.
         v = JM.select(JM.data['count'].as_text()).where(
@@ -701,40 +688,59 @@ class TestSQLShapes(ModelTestCase):
     def test_schema_per_backend(self):
         ddl, _ = JM._schema._create_table().query()
         if IS_SQLITE:
-            self.assertIn('"data" TEXT', ddl)
+            self.assertEqual(ddl, (
+                'CREATE TABLE IF NOT EXISTS "jm" ("id" INTEGER NOT NULL '
+                'PRIMARY KEY, "data" TEXT, "ident" TEXT)'))
         elif IS_PG_JSON:
-            self.assertIn('"data" JSONB', ddl)
+            self.assertEqual(ddl, (
+                'CREATE TABLE IF NOT EXISTS "jm" ("id" SERIAL NOT NULL '
+                'PRIMARY KEY, "data" JSONB, "ident" TEXT)'))
         elif IS_MYSQL:
-            self.assertIn('`data` JSON', ddl)
+            self.assertEqual(ddl, (
+                'CREATE TABLE IF NOT EXISTS `jm` (`id` INTEGER '
+                'AUTO_INCREMENT NOT NULL PRIMARY KEY, `data` JSON, '
+                '`ident` TEXT)'))
 
     def test_extract_default_mode(self):
         sql, params = self._sql(JM.select(JM.data['k']))
         if IS_SQLITE:
-            self.assertIn(' -> ', sql)
-            self.assertIn('$."k"', params)
+            self.assertEqual(sql, (
+                'SELECT ("t1"."data" -> ?) FROM "jm" AS "t1"'))
+            self.assertEqual(params, ['$."k"'])
         elif IS_PG_JSON:
-            self.assertIn(' #> ', sql)
-            self.assertIn(['k'], params)
+            self.assertEqual(sql, (
+                'SELECT ("t1"."data" #> CAST(%s AS text[])) '
+                'FROM "jm" AS "t1"'))
+            self.assertEqual(params, [['k']])
         elif IS_MYSQL:
-            lower = sql.lower()
-            self.assertIn('json_extract', lower)
             if IS_ORACLE_MYSQL:
-                # MySQL has no JSON_COMPACT; CAST to its native json type.
-                self.assertIn('cast(', lower)
+                # MySQL has no JSON_COMPACT, CAST to its native json type.
+                self.assertEqual(sql, (
+                    'SELECT CAST(json_extract(`t1`.`data`, %s) AS JSON) '
+                    'FROM `jm` AS `t1`'))
             else:
-                # MariaDB byte-compares extracts; JSON_COMPACT normalizes.
-                self.assertIn('json_compact', lower)
+                # MariaDB byte-compares extracts, JSON_COMPACT normalizes.
+                self.assertEqual(sql, (
+                    'SELECT JSON_COMPACT(json_extract(`t1`.`data`, %s)) '
+                    'FROM `jm` AS `t1`'))
+            self.assertEqual(params, ['$."k"'])
 
     def test_extract_text_mode(self):
-        sql, _ = self._sql(JM.select(JM.data['k'].as_text()))
+        sql, params = self._sql(JM.select(JM.data['k'].as_text()))
         if IS_SQLITE:
-            self.assertIn(' ->> ', sql)
+            self.assertEqual(sql, (
+                'SELECT ("t1"."data" ->> ?) FROM "jm" AS "t1"'))
+            self.assertEqual(params, ['$."k"'])
         elif IS_PG_JSON:
-            self.assertIn(' #>> ', sql)
+            self.assertEqual(sql, (
+                'SELECT ("t1"."data" #>> CAST(%s AS text[])) '
+                'FROM "jm" AS "t1"'))
+            self.assertEqual(params, [['k']])
         elif IS_MYSQL:
-            lower = sql.lower()
-            self.assertIn('json_unquote', lower)
-            self.assertIn('json_extract', lower)
+            self.assertEqual(sql, (
+                'SELECT json_unquote(json_extract(`t1`.`data`, %s)) '
+                'FROM `jm` AS `t1`'))
+            self.assertEqual(params, ['$."k"'])
 
 
 class TestMySQLJSONStaticFlavor(BaseTestCase):
@@ -747,26 +753,32 @@ class TestMySQLJSONStaticFlavor(BaseTestCase):
                 database = flavor_db
 
         self.assertIsNone(flavor_db.server_version)  # Never connected.
-        sql, _ = M.select().where(build(M)).sql()
-        return sql
+        return M.select().where(build(M)).sql()
 
     def test_value_marking_is_static(self):
         path_eq = lambda M: M.data['k'] == 'v'
-        mysql_sql = self._select_sql(False, path_eq)
-        self.assertIn('CAST(', mysql_sql)
-        self.assertNotIn('JSON_COMPACT', mysql_sql)
+        sql, params = self._select_sql(False, path_eq)
+        self.assertEqual(sql, (
+            'SELECT `t1`.`id`, `t1`.`data` FROM `m` AS `t1` '
+            'WHERE (CAST(json_extract(`t1`.`data`, %s) AS JSON) = '
+            'CAST(%s AS JSON))'))
+        self.assertEqual(params, ['$."k"', '"v"'])
 
-        maria_sql = self._select_sql(True, path_eq)
-        self.assertIn('JSON_COMPACT(', maria_sql)
-        self.assertNotIn('CAST(', maria_sql)
+        sql, params = self._select_sql(True, path_eq)
+        self.assertEqual(sql, (
+            'SELECT `t1`.`id`, `t1`.`data` FROM `m` AS `t1` '
+            'WHERE (JSON_COMPACT(json_extract(`t1`.`data`, %s)) = '
+            'JSON_COMPACT(%s))'))
+        self.assertEqual(params, ['$."k"', '"v"'])
 
     def test_contains_needs_no_marker(self):
         contains = lambda M: M.data.contains({'k': 'v'})
-        shapes = set(self._select_sql(m, contains) for m in (False, True))
-        self.assertEqual(len(shapes), 1)
-        only = shapes.pop()
-        self.assertNotIn('JSON_COMPACT', only)
-        self.assertNotIn('CAST(', only)
+        for mariadb in (False, True):
+            sql, params = self._select_sql(mariadb, contains)
+            self.assertEqual(sql, (
+                'SELECT `t1`.`id`, `t1`.`data` FROM `m` AS `t1` '
+                'WHERE (JSON_CONTAINS(`t1`.`data`, %s) = %s)'))
+            self.assertEqual(params, ['{"k": "v"}', 1])
 
 
 class TestBulkUpdate(ModelTestCase):
@@ -818,7 +830,6 @@ class TestSubqueryAssign(ModelTestCase):
         self.assertEqual(JM.get_by_id(dst.id).data, {'origin': True, 'n': 7})
 
 
-@skip_if(SKIP_PATHS, 'requires SQLite 3.38 or non-SQLite backend')
 class TestJoinOnJSONKey(ModelTestCase):
     requires = [JM, TM]
 
@@ -844,7 +855,6 @@ class TestJoinOnJSONKey(ModelTestCase):
         ])
 
 
-@skip_if(SKIP_PATHS, 'requires SQLite 3.38 or non-SQLite backend')
 class TestMutation(ModelTestCase):
     requires = [JM]
 
@@ -905,7 +915,6 @@ class TestMutation(ModelTestCase):
         self.assertEqual(L, 3)
 
 
-@skip_if(SKIP_PATHS, 'requires SQLite 3.38 or non-SQLite backend')
 class TestInsertReplaceAppend(ModelTestCase):
     requires = [JM]
 
@@ -964,7 +973,6 @@ class TestInsertReplaceAppend(ModelTestCase):
         self.assertEqual(JM.get_by_id(m.id).data, ['a', 'b', 'c'])
 
 
-@skip_if(SKIP_PATHS, 'requires SQLite 3.38 or non-SQLite backend')
 class TestUpdateDivergence(ModelTestCase):
     requires = [JM]
 
@@ -1002,7 +1010,6 @@ class TestUpdateDivergence(ModelTestCase):
             self.assertNotIn('k', m.data)
 
 
-@skip_if(SKIP_PATHS, 'requires SQLite 3.38 or non-SQLite backend')
 class TestDocumentedDivergences(ModelTestCase):
     # Pin the per-backend behaviors promised in the docs, so the docs and
     # the implementation cannot drift apart silently.
@@ -1066,8 +1073,8 @@ class TestDocumentedDivergences(ModelTestCase):
     def test_default_mode_ordering(self):
         JM.create(data={'n': 10})
         JM.create(data={'n': 2})
-        # Numerically only n=10 exceeds 5; under text comparison neither
-        # '10' nor '2' exceeds '5'.
+        # Numerically only n=10 exceeds 5. Under text comparison neither '10'
+        # nor '2' exceeds '5'.
         n = JM.select().where(JM.data['n'] > 5).count()
         if IS_PG_JSON or IS_ORACLE_MYSQL:
             self.assertEqual(n, 1)  # Typed (numeric) comparison.
@@ -1079,8 +1086,8 @@ class TestDocumentedDivergences(ModelTestCase):
         self.assertEqual(n, 1)
 
 
-# JSON structural containment (@> / <@). Native on PG and MySQL/MariaDB;
-# emulated on SQLite via the _pw_json_contains() UDF.
+# JSON structural containment (@> / <@). Native on PG and MySQL/MariaDB.
+# Emulated on SQLite via the _pw_json_contains() UDF.
 class TestContainment(ModelTestCase):
     requires = [JM]
 
@@ -1109,7 +1116,7 @@ class TestContainment(ModelTestCase):
         bigger = {'k': 'v', 'tags': ['python', 'orm', 'sql'],
                   'meta': {'env': 'prod', 'region': 'us'}, 'extra': True}
         q = JM.select().where(JM.data.contained_by(bigger))
-        # Row 1 fits inside `bigger`; rows 2 and 3 don't.
+        # Row 1 fits inside `bigger`. Rows 2 and 3 don't.
         self.assertEqual(q.count(), 1)
 
     def test_contained_by_on_path(self):

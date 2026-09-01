@@ -66,7 +66,7 @@ jobs:
         run: |
           sudo apt-get install libsqlite3-dev
           pip install setuptools psycopg2-binary cython pymysql 'apsw' mysql-connector-python sqlcipher3 pysqlite3 'psycopg[binary]' gevent
-          pip install greenlet aiosqlite aiomysql asyncpg pydantic
+          pip install greenlet aiosqlite aiomysql asyncpg pydantic flask
           python setup.py build_ext -i
           psql peers_test -c 'CREATE EXTENSION hstore;'
       - name: crdb
@@ -87,7 +87,7 @@ jobs:
           PGHOST: 127.0.0.1
           PGPASSWORD: peers
           CI: 1
-        run: python runtests.py --mysql-user=root --mysql-password=peers -s -v2
+        run: python runtests.py --mysql-user=root --mysql-password=peers -v2
       - name: asyncio stress
         if: matrix.peers-backend == 'postgresql' && matrix.python-version == '3.13'
         env:

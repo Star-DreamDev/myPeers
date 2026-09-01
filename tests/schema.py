@@ -1,17 +1,10 @@
 """
-DDL generation tests (CREATE TABLE, indexes, constraints, views).
-
-Test case ordering:
-
-* Core DDL SQL generation (TestModelDDL)
-* CREATE TABLE AS (SQL generation and integration)
-* View field mapping
-* Table name and truncation
-* Named constraints integration
+DDL generation tests (CREATE TABLE, indexes, constraints, sequences).
 """
 import datetime
 
 from peers import *
+from peers import ModelIndex
 from peers import NodeList
 
 from .base import BaseTestCase
@@ -34,6 +27,9 @@ from .base_models import User
 # Each exercises a specific schema feature (unique, sequence, indexes,
 # constraints, schema namespace, etc.).
 # ---------------------------------------------------------------------------
+
+# DDL is rendered through the pinned sqlite db on purpose: the shared
+# backend would render SERIAL, AUTO_INCREMENT or backticks instead.
 
 class TMUnique(TestModel):
     data = TextField(unique=True)
@@ -97,6 +93,7 @@ Article.add_index(SQL('CREATE INDEX "article_foo" ON "article" ("flags" & 3)'))
 # ===========================================================================
 
 class TestModelDDL(ModelDatabaseTestCase):
+    # Fixed dialect for the DDL assertions, see the note above.
     database = get_in_memory_db()
     requires = [Article, CacheData, Category, Note, Person, Relationship,
                 TMUnique, TMSequence, TMIndexes, TMConstraints,
@@ -381,6 +378,56 @@ class TestModelDDL(ModelDatabaseTestCase):
              'WHERE (LOWER(SUBSTR("key", 1, 1)) = \'c\')',
              []),
         ])
+
+    def test_unique_index_nulls(self):
+        class A(Model):
+            a = CharField()
+            b = CharField()
+            class Meta:
+                database = self.database
+
+        idx = ModelIndex(A, ('a', 'b'), unique=True)
+        self.assertSQL(A._schema._create_index(idx), (
+            'CREATE UNIQUE INDEX IF NOT EXISTS '
+            '"a_a_b" ON "a" (a, b)'))
+
+        idx = idx.nulls_distinct(False)
+        self.assertSQL(A._schema._create_index(idx), (
+            'CREATE UNIQUE INDEX IF NOT EXISTS '
+            '"a_a_b" ON "a" (a, b) NULLS NOT DISTINCT'))
+
+        idx = idx.nulls_distinct(True)
+        self.assertSQL(A._schema._create_index(idx), (
+            'CREATE UNIQUE INDEX IF NOT EXISTS '
+            '"a_a_b" ON "a" (a, b) NULLS DISTINCT'))
+
+        idx._unique = False
+        self.assertRaises(ValueError, lambda: idx.nulls_distinct(True))
+        self.assertRaises(ValueError, lambda: idx.nulls_distinct(False))
+
+    def test_model_index(self):
+        class Article(Model):
+            name = TextField()
+            timestamp = TimestampField()
+            status = IntegerField()
+            flags = IntegerField()
+
+        aidx = ModelIndex(Article, (Article.name, Article.timestamp),)
+        self.assertSQL(aidx, (
+            'CREATE INDEX IF NOT EXISTS "article_name_timestamp" ON "article" '
+            '("name", "timestamp")'), [])
+
+        aidx = aidx.where(Article.status == 1)
+        self.assertSQL(aidx, (
+            'CREATE INDEX IF NOT EXISTS "article_name_timestamp" ON "article" '
+            '("name", "timestamp") '
+            'WHERE ("status" = ?)'), [1])
+
+        aidx = ModelIndex(Article, (Article.timestamp.desc(),
+                                    Article.flags.bin_and(4)), unique=True)
+        self.assertSQL(aidx, (
+            'CREATE UNIQUE INDEX IF NOT EXISTS "article_timestamp" '
+            'ON "article" ("timestamp" DESC, ("flags" & ?))'), [4])
 
     def test_legacy_model_table_and_indexes(self):
         class Base(Model):
@@ -881,6 +928,19 @@ class TestModelDDL(ModelDatabaseTestCase):
              '"data" TEXT NOT NULL)'),
         ])
 
+    def test_identity_field_generate_always(self):
+        class IDAlways(TestModel):
+            id = IdentityField(generate_always=True)
+            data = CharField()
+            class Meta:
+                database = self.database
+
+        self.assertCreateTable(IDAlways, [
+            ('CREATE TABLE "id_always" ('
+             '"id" INT GENERATED ALWAYS AS IDENTITY NOT NULL PRIMARY KEY, '
+             '"data" VARCHAR(255) NOT NULL)'),
+        ])
+
     def test_self_fk_inheritance(self):
         class BaseCategory(TestModel):
             parent = ForeignKeyField('self', backref='children')
@@ -959,8 +1019,60 @@ class TestModelDDL(ModelDatabaseTestCase):
             '"id" INTEGER NOT NULL PRIMARY KEY, '
             '"price" INTEGER NOT NULL CONSTRAINT "pc" CHECK (price > 0))'), [])
 
+    def test_create_table_query(self):
+        class Post(TestModel):
+            title = CharField()
+            class Meta:
+                database = self.database
+
+        class Tag(TestModel):
+            tag = CharField()
+            class Meta:
+                database = self.database
+
+        class TagPostThrough(TestModel):
+            tag = ForeignKeyField(Tag, backref='posts')
+            post = ForeignKeyField(Post, backref='tags')
+            class Meta:
+                database = self.database
+                primary_key = CompositeKey('tag', 'post')
+
+        query, params = TagPostThrough._schema._create_table().query()
+        self.assertEqual(query, (
+            'CREATE TABLE IF NOT EXISTS "tag_post_through" ('
+            '"tag_id" INTEGER NOT NULL, '
+            '"post_id" INTEGER NOT NULL, '
+            'PRIMARY KEY ("tag_id", "post_id"), '
+            'FOREIGN KEY ("tag_id") REFERENCES "tag" ("id"), '
+            'FOREIGN KEY ("post_id") REFERENCES "post" ("id"))'))
+
+    def test_composite_key_inheritance(self):
+        class Person(TestModel):
+            first = TextField()
+            last = TextField()
+
+            class Meta:
+                database = self.database
+                primary_key = CompositeKey('first', 'last')
+
+        self.assertTrue(isinstance(Person._meta.primary_key, CompositeKey))
+        self.assertEqual(Person._meta.primary_key.field_names,
+                         ('first', 'last'))
+
+        class Employee(Person):
+            title = TextField()
+
+        self.assertTrue(isinstance(Employee._meta.primary_key, CompositeKey))
+        self.assertEqual(Employee._meta.primary_key.field_names,
+                         ('first', 'last'))
+        self.assertEqual(Employee._schema._create_table().query(), (
+            'CREATE TABLE IF NOT EXISTS "employee" ('
+            '"first" TEXT NOT NULL, "last" TEXT NOT NULL, '
+            '"title" TEXT NOT NULL, PRIMARY KEY ("first", "last"))', []))
+
 
 class TestDDLAdditionalSQL(ModelDatabaseTestCase):
+    # Fixed dialect for the DDL assertions, see the note above.
     database = get_in_memory_db()
     requires = [User, Note, Person]
 
@@ -997,12 +1109,6 @@ class TestDDLAdditionalSQL(ModelDatabaseTestCase):
         self.assertSQL(User._schema._drop_table(safe=True),
                        'DROP TABLE IF EXISTS "users"', [])
 
-    def test_drop_table_cascade_restrict(self):
-        self.assertSQL(Note._schema._drop_table(cascade=True),
-                       'DROP TABLE IF EXISTS "note" CASCADE', [])
-        self.assertSQL(Note._schema._drop_table(restrict=True),
-                       'DROP TABLE IF EXISTS "note" RESTRICT', [])
-
     def test_drop_indexes_sql(self):
         class Indexed(TestModel):
             val = CharField()
@@ -1012,9 +1118,7 @@ class TestDDLAdditionalSQL(ModelDatabaseTestCase):
 
         results = Indexed._schema._drop_indexes(safe=True)
         self.assertEqual(len(results), 1)
-        sql, _ = results[0].query()
-        self.assertTrue(sql.startswith('DROP INDEX '))
-        self.assertIn('indexed_val', sql)
+        self.assertSQL(results[0], 'DROP INDEX IF EXISTS "indexed_val"', [])
 
     def test_create_foreign_key_sql(self):
         self.assertSQL(Note._schema._create_foreign_key(Note.author), (
@@ -1026,14 +1130,6 @@ class TestDDLAdditionalSQL(ModelDatabaseTestCase):
         # SQLite truncate falls back to DELETE FROM.
         ctx = User._schema._truncate_table()
         self.assertSQL(ctx, 'DELETE FROM "users"', [])
-
-    def test_database_required_error(self):
-        # SchemaManager raises ImproperlyConfigured when no DB set.
-        class Orphan(Model):
-            name = CharField()
-
-        self.assertRaises(ImproperlyConfigured,
-                          lambda: Orphan._schema.database)
 
 
 # ===========================================================================
@@ -1054,6 +1150,7 @@ class TMKVNew(TestModel):
 
 
 class TestCreateTableAsSQL(ModelDatabaseTestCase):
+    # Fixed dialect for the DDL assertions, see the note above.
     database = get_in_memory_db()
     requires = [TMKV]
 
@@ -1161,46 +1258,8 @@ class TestCreateTableAs(ModelTestCase):
 
 
 # ===========================================================================
-# Table name, truncation, view field mapping, and named constraints
+# Truncation and named constraints
 # ===========================================================================
-
-class TestViewFieldMapping(ModelTestCase):
-    requires = [User]
-
-    def tearDown(self):
-        try:
-            self.execute('drop view user_testview_fm')
-        except Exception as exc:
-            pass
-        super(TestViewFieldMapping, self).tearDown()
-
-    def test_view_field_mapping(self):
-        user = User.create(username='huey')
-        self.execute('create view user_testview_fm as '
-                     'select id, username from users')
-
-        class View(User):
-            class Meta:
-                table_name = 'user_testview_fm'
-
-        self.assertEqual([(v.id, v.username) for v in View.select()],
-                         [(user.id, 'huey')])
-class TestModelSetTableName(BaseTestCase):
-    def test_set_table_name(self):
-        class Foo(TestModel):
-            pass
-
-        self.assertEqual(Foo._meta.table_name, 'foo')
-        self.assertEqual(Foo._meta.table.__name__, 'foo')
-
-        # Writing the attribute directly does not update the cached Table name.
-        Foo._meta.table_name = 'foo2'
-        self.assertEqual(Foo._meta.table.__name__, 'foo')
-
-        # Use the helper-method.
-        Foo._meta.set_table_name('foo3')
-        self.assertEqual(Foo._meta.table.__name__, 'foo3')
-
 
 class TestTruncateTable(ModelTestCase):
     requires = [User]
@@ -1208,13 +1267,6 @@ class TestTruncateTable(ModelTestCase):
     def test_truncate_table(self):
         for i in range(3):
             User.create(username='u%s' % i)
-
-        ctx = User._schema._truncate_table()
-        if IS_SQLITE:
-            self.assertSQL(ctx, 'DELETE FROM "users"', [])
-        else:
-            sql, _ = ctx.query()
-            self.assertTrue(sql.startswith('TRUNCATE TABLE '))
 
         User.truncate_table()
         self.assertEqual(User.select().count(), 0)
@@ -1244,10 +1296,11 @@ class TestNamedConstraintsIntegration(ModelTestCase):
 
 
 # ===========================================================================
-# Gap coverage: Truncate SQL variants, sequence error paths
+# Gap coverage: truncate SQL, sequences, create/drop_all, pg schemas
 # ===========================================================================
 
 class TestTruncateTableSQL(ModelDatabaseTestCase):
+    # Fixed dialect for the DDL assertions, see the note above.
     database = get_in_memory_db()
     requires = [User]
 
@@ -1279,6 +1332,7 @@ class TestTruncateTableSQL(ModelDatabaseTestCase):
 
 
 class TestSchemaSequenceErrors(ModelDatabaseTestCase):
+    # Fixed dialect for the DDL assertions, see the note above.
     database = get_in_memory_db()
     requires = [User]
 
@@ -1336,7 +1390,7 @@ class TestSchemaGetIndexes(ModelTestCase):
         with self.database:
             self.database.execute_sql('drop schema s1 cascade')
             self.database.execute_sql('drop schema s2 cascade')
-        super(TestSchemaGetIndexes, self).setUp()
+        super(TestSchemaGetIndexes, self).tearDown()
 
     def test_schema_get_indexes(self):
         tables = self.database.get_tables(schema='s1')

@@ -131,9 +131,8 @@ async def stress_test(db, num_tasks=100, ops_per_task=10):
     async with db:
         total_users = await db.run(User.select().count)
 
-    # Dead-task state is reaped via task done-callbacks; orphaned
-    # connections (from tasks that died holding one) are drained on
-    # connect / close_pool.
+    # Dead-task state is reaped via task done-callbacks. Orphaned connections
+    # (from tasks that died holding one) are drained on connect / close_pool.
     orphans = len(db._state._orphaned_conns)
 
     # Report
@@ -260,7 +259,7 @@ async def main():
 
     # Test 3: Even smaller pool.
     db3 = AsyncPostgresqlDatabase('peers_test', pool_size=3, **PSQL_PARAMS)
-    success3 = await stress_test(db2, num_tasks=100, ops_per_task=20)
+    success3 = await stress_test(db3, num_tasks=100, ops_per_task=20)
 
     ## Test 3: Connection isolation
     success4 = await test_connection_isolation()
@@ -270,11 +269,11 @@ async def main():
 
     # Final report
     print('=' * 60)
-    print('Stress Test 1 (100 tasks): %s' % 'OK' if success1 else 'FAIL')
-    print('Stress Test 2 (200 tasks): %s' % 'OK' if success2 else 'FAIL')
-    print('Stress Test 3 (100 tasks): %s' % 'OK' if success3 else 'FAIL')
-    print('Isolation Test: %s' % 'OK' if success4 else 'FAIL')
-    print('Pool Exhaustion Test: %s' % 'OK' if success5 else 'FAIL')
+    print('Stress Test 1 (100 tasks): %s' % ('OK' if success1 else 'FAIL'))
+    print('Stress Test 2 (200 tasks): %s' % ('OK' if success2 else 'FAIL'))
+    print('Stress Test 3 (100 tasks): %s' % ('OK' if success3 else 'FAIL'))
+    print('Isolation Test: %s' % ('OK' if success4 else 'FAIL'))
+    print('Pool Exhaustion Test: %s' % ('OK' if success5 else 'FAIL'))
     print('=' * 60)
 
     if all([success1, success2, success3, success4, success5]):

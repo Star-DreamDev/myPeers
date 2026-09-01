@@ -6,22 +6,12 @@ relationships, Meta options, etc.) produce correct SQL. Unlike sql.py which
 tests lower-level Table objects, these tests exercise the Model metaclass
 machinery including automatic join resolution, field type coercion, and alias
 handling.
-
-Test case ordering:
-
-* Core Model query SQL (SELECT, INSERT, UPDATE, DELETE)
-* ON CONFLICT SQL with Models
-* String-based field references
-* Compound SELECT with Models
-* Model index SQL
-* Query cloning and regressions
 """
 import datetime
 
 from peers import *
 from peers import Alias
 from peers import Database
-from peers import ModelIndex
 
 from .base import get_in_memory_db
 from .base import requires_pglike
@@ -29,10 +19,16 @@ from .base import skip_if
 from .base import BaseTestCase
 from .base import IS_CRDB
 from .base import ModelDatabaseTestCase
+from .base import ModelTestCase
 from .base import TestModel
+from .base import db
 from .base import __sql__
 from .base_models import *
 
+
+# The SQL-asserting classes below pin an in-memory sqlite db so the
+# rendered dialect is fixed. Models bound to the shared db would pick up
+# that backend, and an INSERT would gain a RETURNING clause on postgres.
 
 class CKM(TestModel):
     category = CharField()
@@ -47,8 +43,10 @@ class CKM(TestModel):
 # ===========================================================================
 
 class TestModelSQL(ModelDatabaseTestCase):
+    # Fixed dialect for the SQL assertions, see the note above.
     database = get_in_memory_db()
-    requires = [Category, CKM, Note, Person, Relationship, Sample, User, DfltM]
+    requires = [Category, CKM, Favorite, Note, Person, Sample, Tweet, User,
+                DfltM]
 
     def test_select(self):
         query = User.select()
@@ -215,6 +213,22 @@ class TestModelSQL(ModelDatabaseTestCase):
             'FROM "huey"."with_schema" AS "t1" '
             'WHERE ("t1"."data" = ?)'), ['zaizee'])
 
+    def test_table_schema(self):
+        class Schema(TestModel):
+            pass
+
+        self.assertTrue(Schema._meta.schema is None)
+        self.assertSQL(Schema.select(), (
+            'SELECT "t1"."id" FROM "schema" AS "t1"'), [])
+
+        Schema._meta.schema = 'test'
+        self.assertSQL(Schema.select(), (
+            'SELECT "t1"."id" FROM "test"."schema" AS "t1"'), [])
+
+        Schema._meta.schema = 'another'
+        self.assertSQL(Schema.select(), (
+            'SELECT "t1"."id" FROM "another"."schema" AS "t1"'), [])
+
     def test_distinct(self):
         query = User.select().distinct()
         self.assertSQL(query, (
@@ -329,7 +343,7 @@ class TestModelSQL(ModelDatabaseTestCase):
 
     def test_filter_lookups(self):
         # One entry per DJANGO_MAP lookup, asserting the generated SQL. The
-        # exhaustive LIKE-escaping matrix lives in tests/sql.py.
+        # exhaustive LIKE-escaping matrix is in tests/sql.py.
         for filters, clause, params in (
                 ({'id__eq': 3}, '("t1"."id" = ?)', [3]),
                 ({'id__ne': 3}, '("t1"."id" != ?)', [3]),
@@ -862,6 +876,9 @@ class TestModelSQL(ModelDatabaseTestCase):
             'WHERE first = ? AND substr(last, 1, 1) = ? '
             'ORDER BY last'), ['huey', 'l'])
 
+    def test_noop_sql_generation(self):
+        self.assertSQL(User.noop(), 'SELECT 0 WHERE 0', [])
+
     def test_insert(self):
         query = (Person
                  .insert({Person.first: 'huey',
@@ -904,6 +921,21 @@ class TestModelSQL(ModelDatabaseTestCase):
                 database = self.database
         self.assertSQL(NoDflt.insert(),
                        'INSERT INTO "no_dflt" DEFAULT VALUES', [])
+
+    def test_empty(self):
+        class Empty(TestModel): pass
+        if isinstance(db, MySQLDatabase):
+            sql = 'INSERT INTO "empty" () VALUES ()'
+            if db.returning_clause:
+                # The mariadb connector on server >= 10.5.
+                sql += ' RETURNING "empty"."id"'
+        elif isinstance(db, PostgresqlDatabase):
+            sql = 'INSERT INTO "empty" DEFAULT VALUES RETURNING "empty"."id"'
+        else:
+            sql = 'INSERT INTO "empty" DEFAULT VALUES'
+
+        for query in (Empty.insert(), Empty.insert({}), Empty.insert([])):
+            self.assertSQL(query, sql, [])
 
     def test_replace(self):
         query = (Person
@@ -1337,12 +1369,84 @@ class TestModelSQL(ModelDatabaseTestCase):
         ])
 
 
+class TestModelAliasFieldProperties(ModelTestCase):
+    # Fixed dialect for the SQL assertions, see the note above.
+    database = get_in_memory_db()
+
+    def test_field_properties(self):
+        class Person(TestModel):
+            name = TextField()
+            dob = DateField()
+            class Meta:
+                database = self.database
+
+        class Job(TestModel):
+            worker = ForeignKeyField(Person, backref='jobs')
+            client = ForeignKeyField(Person, backref='jobs_hired')
+            class Meta:
+                database = self.database
+
+        Worker = Person.alias()
+        Client = Person.alias()
+
+        expected_sql = (
+            'SELECT "t1"."id", "t1"."worker_id", "t1"."client_id" '
+            'FROM "job" AS "t1" '
+            'INNER JOIN "person" AS "t2" ON ("t1"."client_id" = "t2"."id") '
+            'INNER JOIN "person" AS "t3" ON ("t1"."worker_id" = "t3"."id") '
+            'WHERE (date_part(?, "t2"."dob") = ?)')
+        expected_params = ['year', 1983]
+
+        query = (Job
+                 .select()
+                 .join(Client, on=(Job.client == Client.id))
+                 .switch(Job)
+                 .join(Worker, on=(Job.worker == Worker.id))
+                 .where(Client.dob.year == 1983))
+        self.assertSQL(query, expected_sql, expected_params)
+
+        query = (Job
+                 .select()
+                 .join(Client, on=(Job.client == Client.id))
+                 .switch(Job)
+                 .join(Person, on=(Job.worker == Person.id))
+                 .where(Client.dob.year == 1983))
+        self.assertSQL(query, expected_sql, expected_params)
+
+        query = (Job
+                 .select()
+                 .join(Person, on=(Job.client == Person.id))
+                 .switch(Job)
+                 .join(Worker, on=(Job.worker == Worker.id))
+                 .where(Person.dob.year == 1983))
+        self.assertSQL(query, expected_sql, expected_params)
+
+
+class TestModelAliasEdgeCases(BaseTestCase):
+    def test_setattr_raises(self):
+        UA = User.alias()
+        with self.assertRaisesCtx(AttributeError):
+            UA.custom_attr = 42
+
+    def test_call_creates_instance(self):
+        UA = User.alias()
+        inst = UA(username='huey')
+        self.assertIsInstance(inst, User)
+        self.assertEqual(inst.username, 'huey')
+
+    def test_get_field_aliases(self):
+        UA = User.alias()
+        aliases = UA.get_field_aliases()
+        field_names = [fa.field.name for fa in aliases]
+        self.assertIn('id', field_names)
+        self.assertIn('username', field_names)
+
+
 # ===========================================================================
 # Advanced Model SQL: RETURNING, window functions, CTE, LATERAL
 # ===========================================================================
 
 class TestModelAdvancedSQL(ModelDatabaseTestCase):
-    database = get_in_memory_db()
     requires = [Category, Note, Person, Sample, User]
 
     def test_update_returning(self):
@@ -1678,6 +1782,7 @@ class TestModelAdvancedSQL(ModelDatabaseTestCase):
 # ===========================================================================
 
 class TestOnConflictShortcutSQL(ModelDatabaseTestCase):
+    # Fixed dialect for the SQL assertions, see the note above.
     database = get_in_memory_db()
     requires = [User, Emp]
 
@@ -1693,13 +1798,6 @@ class TestOnConflictShortcutSQL(ModelDatabaseTestCase):
             'INSERT OR REPLACE INTO "emp" '
             '("first", "last", "empno") VALUES (?, ?, ?)'),
             ['h', 'c', '1'])
-
-    def test_on_conflict_both_target_and_constraint_raises(self):
-        self.assertRaises(
-            ValueError,
-            User.insert(username='test').on_conflict,
-            conflict_target=[User.username],
-            conflict_constraint='foo')
 
 
 # ===========================================================================
@@ -1826,6 +1924,8 @@ class TestOnConflictSQL(ModelDatabaseTestCase):
 # ===========================================================================
 
 class TestStringsForFieldsInsertUpdate(ModelDatabaseTestCase):
+    # Not inert: setUp rebinds the models here, and INSERT rendered
+    # against the shared pg db gains RETURNING.
     database = get_in_memory_db()
     requires = [Note, Person, Relationship]
 
@@ -1871,11 +1971,9 @@ class Alpha(CompoundTestModel):
 
 class Beta(CompoundTestModel):
     beta = IntegerField()
-    other = IntegerField(default=0)
 
 class Gamma(CompoundTestModel):
     gamma = IntegerField()
-    other = IntegerField(default=1)
 
 
 class TestModelCompoundSelect(BaseTestCase):
@@ -1964,7 +2062,7 @@ class TestModelCompoundSelect(BaseTestCase):
         lhs = Alpha.select(Alpha.alpha).order_by(Alpha.alpha).limit(3)
         rhs = Beta.select(Beta.beta).order_by(Beta.beta).limit(4)
         compound = (lhs | rhs).limit(5)
-        # Each member carries its own ORDER BY / LIMIT, so it is wrapped as a
+        # Each member has its own ORDER BY / LIMIT, so it is wrapped as a
         # subquery (CSQ never / sqlite) to keep that ordering from rebinding to
         # the whole statement.
         self.assertSQL(compound, (
@@ -2055,64 +2153,11 @@ class TestModelCompoundSelect(BaseTestCase):
 
 
 # ===========================================================================
-# Model index SQL and miscellaneous
+# Miscellaneous: model as query argument, cloning, regressions
 # ===========================================================================
 
-class TestModelIndex(BaseTestCase):
-    database = SqliteDatabase(None)
-
-    def test_model_index(self):
-        class Article(Model):
-            name = TextField()
-            timestamp = TimestampField()
-            status = IntegerField()
-            flags = IntegerField()
-
-        aidx = ModelIndex(Article, (Article.name, Article.timestamp),)
-        self.assertSQL(aidx, (
-            'CREATE INDEX IF NOT EXISTS "article_name_timestamp" ON "article" '
-            '("name", "timestamp")'), [])
-
-        aidx = aidx.where(Article.status == 1)
-        self.assertSQL(aidx, (
-            'CREATE INDEX IF NOT EXISTS "article_name_timestamp" ON "article" '
-            '("name", "timestamp") '
-            'WHERE ("status" = ?)'), [1])
-
-        aidx = ModelIndex(Article, (Article.timestamp.desc(),
-                                    Article.flags.bin_and(4)), unique=True)
-        self.assertSQL(aidx, (
-            'CREATE UNIQUE INDEX IF NOT EXISTS "article_timestamp" '
-            'ON "article" ("timestamp" DESC, ("flags" & ?))'), [4])
-
-    def test_unique_index_nulls(self):
-        class A(Model):
-            a = CharField()
-            b = CharField()
-            class Meta:
-                database = self.database
-
-        idx = ModelIndex(A, ('a', 'b'), unique=True)
-        self.assertSQL(A._schema._create_index(idx), (
-            'CREATE UNIQUE INDEX IF NOT EXISTS '
-            '"a_a_b" ON "a" (a, b)'))
-
-        idx = idx.nulls_distinct(False)
-        self.assertSQL(A._schema._create_index(idx), (
-            'CREATE UNIQUE INDEX IF NOT EXISTS '
-            '"a_a_b" ON "a" (a, b) NULLS NOT DISTINCT'))
-
-        idx = idx.nulls_distinct(True)
-        self.assertSQL(A._schema._create_index(idx), (
-            'CREATE UNIQUE INDEX IF NOT EXISTS '
-            '"a_a_b" ON "a" (a, b) NULLS DISTINCT'))
-
-        idx._unique = False
-        self.assertRaises(ValueError, lambda: idx.nulls_distinct(True))
-        self.assertRaises(ValueError, lambda: idx.nulls_distinct(False))
-
-
 class TestModelArgument(BaseTestCase):
+    # Fixed dialect for the SQL assertions, see the note above.
     database = SqliteDatabase(None)
 
     def test_model_as_argument(self):
@@ -2243,57 +2288,67 @@ class TestRegressionNodeListClone(BaseTestCase):
 
 
 # ===========================================================================
-# Gap coverage: NoopModelSelect SQL, model group_by with model arg,
-# ModelSelect cross join error, FieldAlias delegation
+# Gap coverage: FieldAlias operator delegation, query.sql() shapes
 # ===========================================================================
 
-class TestNoopModelSelectSQL(ModelDatabaseTestCase):
-    database = get_in_memory_db()
-    requires = [User]
-
-    def test_noop_sql_generation(self):
-        query = User.noop()
-        sql_str, params = query.sql()
-        # SQLite: SELECT 0 WHERE (0)
-        self.assertIn('SELECT', sql_str)
-        self.assertIn('0', sql_str)
-
-    def test_noop_cursor_wrapper_type(self):
-        from peers import CursorWrapper
-        query = User.noop()
-        result = query.execute()
-        self.assertIsInstance(result, CursorWrapper)
-
-
 class TestFieldAliasOperators(ModelDatabaseTestCase):
+    # Fixed dialect for the SQL assertions, see the note above.
     database = get_in_memory_db()
     requires = [User]
 
     def test_field_alias_contains(self):
         UA = User.alias('ua')
         query = UA.select().where(UA.username.contains('test'))
-        sql, params = query.sql()
-        # On SQLite, ILIKE maps to LIKE. Just verify the query is valid.
-        self.assertIn('"ua"', sql)
-        # The param should contain the wrapped search term.
-        self.assertEqual(params, ['%test%'])
+        self.assertSQL(query, (
+            'SELECT "ua"."id", "ua"."username" FROM "users" AS "ua" '
+            'WHERE ("ua"."username" ILIKE ?)'), ['%test%'])
 
     def test_field_alias_is_null(self):
         UA = User.alias('ua')
         query = UA.select().where(UA.username.is_null())
-        sql, params = query.sql()
-        self.assertIn('IS NULL', sql)
+        self.assertSQL(query, (
+            'SELECT "ua"."id", "ua"."username" FROM "users" AS "ua" '
+            'WHERE ("ua"."username" IS NULL)'), [])
 
     def test_field_alias_between(self):
         UA = User.alias('ua')
         query = UA.select().where(UA.id.between(1, 10))
-        sql, params = query.sql()
-        self.assertIn('BETWEEN', sql)
-        self.assertEqual(params, [1, 10])
+        self.assertSQL(query, (
+            'SELECT "ua"."id", "ua"."username" FROM "users" AS "ua" '
+            'WHERE ("ua"."id" BETWEEN ? AND ?)'), [1, 10])
 
     def test_field_alias_in_(self):
         UA = User.alias('ua')
         query = UA.select().where(UA.id.in_([1, 2, 3]))
-        sql, params = query.sql()
-        self.assertIn('IN', sql)
-        self.assertEqual(params, [1, 2, 3])
+        self.assertSQL(query, (
+            'SELECT "ua"."id", "ua"."username" FROM "users" AS "ua" '
+            'WHERE ("ua"."id" IN (?, ?, ?))'), [1, 2, 3])
+
+
+class TestQuerySqlMethod(ModelDatabaseTestCase):
+    # In-memory pin: User bound to the shared pg db renders INSERT with
+    # RETURNING.
+    database = get_in_memory_db()
+    requires = [User]
+
+    def test_sql_returns_tuple(self):
+        query = User.select().where(User.username == 'huey')
+        self.assertSQL(query, (
+            'SELECT "t1"."id", "t1"."username" FROM "users" AS "t1" '
+            'WHERE ("t1"."username" = ?)'), ['huey'])
+
+    def test_sql_insert(self):
+        query = User.insert(username='huey')
+        self.assertSQL(query, (
+            'INSERT INTO "users" ("username") VALUES (?)'), ['huey'])
+
+    def test_sql_update(self):
+        query = User.update({User.username: 'zaizee'}).where(User.id == 1)
+        self.assertSQL(query, (
+            'UPDATE "users" SET "username" = ? '
+            'WHERE ("users"."id" = ?)'), ['zaizee', 1])
+
+    def test_sql_delete(self):
+        query = User.delete().where(User.id == 1)
+        self.assertSQL(query, (
+            'DELETE FROM "users" WHERE ("users"."id" = ?)'), [1])

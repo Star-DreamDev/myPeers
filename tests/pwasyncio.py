@@ -39,6 +39,8 @@ class TestModel(Model):
     name = CharField()
     value = IntegerField(default=0)
 
+# Local models on purpose. asyncSetUp rebinds them to the async database
+# with no restore.
 class User(Model):
     username = CharField()
 
@@ -117,10 +119,6 @@ class TestGreenletSpawn(unittest.IsolatedAsyncioTestCase):
             raise RuntimeError('async error')
         with self.assertRaises(RuntimeError):
             await greenlet_spawn(lambda: await_(fail()))
-
-    def test_await_outside_greenlet(self):
-        with self.assertRaises(MissingGreenletBridge):
-            await_(Mock())
 
     def test_await_outside_greenlet_hint(self):
         with self.assertRaises(MissingGreenletBridge) as ctx:
@@ -625,8 +623,7 @@ class TestConnectionWrappers(unittest.IsolatedAsyncioTestCase):
         cursor = await conn.execute_iter(
             'SELECT * FROM t WHERE a = %s AND b = %s', params=(1, 2))
         sql = mock_conn.prepare.call_args[0][0]
-        self.assertIn('$1', sql)
-        self.assertNotIn('%s', sql)
+        self.assertEqual(sql, 'SELECT * FROM t WHERE a = $1 AND b = $2')
         await cursor.aclose()
 
     async def test_pg_execute_iter_lock_on_failure(self):
@@ -2315,10 +2312,6 @@ class IntegrationTests(object):
             self.assertEqual(await count(M.data.contained_by(
                 {'k': 'v', 'tags': ['a', 'b'], 'n': 5, 'x': 0})), 1)
 
-    async def test_sync_query_outside_bridge(self):
-        with self.assertRaises(MissingGreenletBridge):
-            list(TestModel.select())
-
 
 class TestSqliteIntegration(IntegrationTests, unittest.IsolatedAsyncioTestCase):
     def get_database(self):
@@ -2417,9 +2410,9 @@ class TestPostgresqlIntegration(IntegrationTests, unittest.IsolatedAsyncioTestCa
         await self.assertCount(2)
 
     async def test_json_field_jsonb(self):
-        # Core JSONField maps to a real jsonb column on Postgres; values with
+        # Core JSONField maps to a real jsonb column on Postgres. Values with
         # %s/%% survive asyncpg placeholder translation (they ride as bound
-        # params); and jsonb decodes through the server-side cursor.
+        # params). The jsonb value decodes through the server-side cursor.
         async with self._json_model() as M:
             r = await self.db.aexecute_sql(
                 'SELECT data_type FROM information_schema.columns '
@@ -2450,9 +2443,6 @@ class TestMySQLIntegration(IntegrationTests, unittest.IsolatedAsyncioTestCase):
                                   **MYSQL_PARAMS)
 
 
-if __name__ == '__main__':
-    unittest.main()
-
 
 class TestConnectErrorTranslation(unittest.IsolatedAsyncioTestCase):
     async def test_sqlite_connect_error_translated(self):
@@ -2462,3 +2452,7 @@ class TestConnectErrorTranslation(unittest.IsolatedAsyncioTestCase):
                 await db.aconnect()
         finally:
             await db.close_pool()
+
+
+if __name__ == '__main__':
+    unittest.main()

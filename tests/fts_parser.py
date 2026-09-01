@@ -88,7 +88,7 @@ class TestWebQuery(ModelTestCase):
         ('misc: aa', '"misc:" AND "aa"'),
         ('re: hello', '"re:" AND "hello"'),
 
-        # fts5 syntax with no search-box meaning is carried as text.
+        # fts5 syntax with no search-box meaning is treated as text.
         ('covid-19', '"covid-19"'),
         ("o'brien", '"o\'brien"'),
         ('c++', '"c++"'),

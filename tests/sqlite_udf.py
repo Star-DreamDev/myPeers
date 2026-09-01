@@ -3,14 +3,13 @@ import json
 import random
 
 from peers import *
-from peers import sqlite3
 from playhouse.sqlite_udf import register_all
 
-from .base import IS_SQLITE_9
 from .base import ModelTestCase
 from .base import TestModel
 from .base import get_sqlite_db
 from .base import skip_unless
+from .base_models import User
 try:
     from playhouse import _sqlite_udf as cython_udf
 except ImportError:
@@ -23,10 +22,6 @@ def requires_cython(method):
 
 database = get_sqlite_db()
 register_all(database)
-
-
-class User(TestModel):
-    username = TextField()
 
 
 class APIResponse(TestModel):
@@ -311,7 +306,6 @@ class TestScalarFunctions(BaseTestUDF):
             ('a.b.c.peers', 1),
             ('a.charlesleifer.com', 1)])
 
-    @skip_unless(IS_SQLITE_9, 'requires sqlite >= 3.9')
     def test_toggle(self):
         self.assertEqual(self.sql1('select toggle(?)', 'foo'), 1)
         self.assertEqual(self.sql1('select toggle(?)', 'bar'), 1)

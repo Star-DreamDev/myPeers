@@ -21,12 +21,10 @@ from .base import IS_MYSQL
 from .base import IS_POSTGRESQL
 from .base import IS_PSYCOPG3
 from .base import IS_SQLITE
-from .base import IS_SQLITE_25
 from .base import IS_SQLITE_35
 from .base import IS_SQLITE_53
 from .base import ModelTestCase
 from .base import TestModel
-from .base import db
 from .base import get_in_memory_db
 from .base import requires_models
 from .base import requires_pglike
@@ -349,7 +347,7 @@ class TestSchemaMigration(ModelTestCase):
                  .order_by(NewPerson.first))
         self.assertEqual(list(query.tuples()), self._person_data)
 
-    @skip_unless(IS_SQLITE_25, 'Requires sqlite 3.25 or newer')
+    @requires_sqlite
     def test_rename_column_sqlite_legacy(self):
         self.test_rename_column(legacy=True)
 
@@ -383,7 +381,7 @@ class TestSchemaMigration(ModelTestCase):
             [(np.title, np.user.id) for np in query],
             [('p1-1', 'charlie'), ('p2-1', 'charlie'), ('p3-2', 'huey')])
 
-    @skip_unless(IS_SQLITE_25, 'Requires sqlite 3.25 or newer')
+    @requires_sqlite
     def test_rename_gh380_sqlite_legacy(self):
         self.test_rename_gh380(legacy=True)
 
@@ -958,7 +956,9 @@ class TestSchemaMigration(ModelTestCase):
             migrate(self.migrator.add_not_null('uc', 'a', legacy=True))
             row = db.execute_sql('SELECT sql FROM sqlite_master '
                                  "WHERE type='table' AND name='uc'").fetchone()
-            self.assertIn('UNIQUE', row[0].upper())
+            self.assertEqual(row[0], (
+                'CREATE TABLE "uc" ("id" INTEGER PRIMARY KEY, '
+                '"a" TEXT NOT NULL, "b" TEXT, UNIQUE (a, b))'))
         finally:
             db.execute_sql('DROP TABLE IF EXISTS "uc"')
 
@@ -1194,7 +1194,7 @@ class TestSqliteColumnNameRegression(ModelTestCase):
             'foreign_data': 'fd',
             'new_data': 'foo'}])
 
-        # Verify constraints were carried over.
+        # Verify constraints were preserved.
         data = {'primary_data': 'pd', 'foreign_data': 'xx', 'new_data': 'd'}
         self.assertRaises(IntegrityError, BNT.insert(data).execute)
 
@@ -1776,7 +1776,7 @@ class TestRunnerSchema(DatabaseTestCase):
         self.assertEqual(self.columns(self.target),
                          ['first_name', 'id', 'notes'])
         self.assertEqual(self.columns(self.decoy), ['first_name', 'id'])
-        # History lives in the schema it describes.
+        # History is stored in the schema it describes.
         self.assertTrue('schema_migration' in self.tables(self.target))
         self.assertFalse('schema_migration' in self.tables(self.decoy))
 
@@ -2123,7 +2123,7 @@ class TestMigrationsCLIDiff(BaseTestCase):
         self.assertTrue(os.path.exists(path))
         with open(path) as fh:
             body = fh.read()
-        self.assertIn('db.create_tables([Widget])', body)
+        self.assertEqual(body.split('\n', 1)[1], CLI_INITIAL_BODY)
 
         rc, out, err = run_cli(self.url, 'up', '-d', self.migdir)
         self.assertEqual(rc, 0)

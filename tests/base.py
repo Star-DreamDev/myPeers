@@ -4,6 +4,7 @@ import datetime
 import logging
 import os
 import re
+import sys
 import unittest
 
 from peers import *
@@ -60,7 +61,6 @@ def get_sqlite_db():
 
 BACKEND = os.environ.get('PEERS_TEST_BACKEND') or 'sqlite'
 VERBOSITY = int(os.environ.get('PEERS_TEST_VERBOSITY') or 1)
-SLOW_TESTS = bool(os.environ.get('PEERS_SLOW_TESTS'))
 
 # What family of database are we using.
 IS_SQLITE = BACKEND.startswith(('sqlite', 'cysqlite'))
@@ -124,15 +124,12 @@ db = new_connection()
 
 
 # Database-specific feature flags.
-IS_SQLITE_OLD = IS_SQLITE and sqlite3.sqlite_version_info < (3, 18)
-IS_SQLITE_15 = IS_SQLITE and sqlite3.sqlite_version_info >= (3, 15)
-IS_SQLITE_24 = IS_SQLITE and sqlite3.sqlite_version_info >= (3, 24)
-IS_SQLITE_25 = IS_SQLITE and sqlite3.sqlite_version_info >= (3, 25)
 IS_SQLITE_30 = IS_SQLITE and sqlite3.sqlite_version_info >= (3, 30)
 IS_SQLITE_35 = IS_SQLITE and sqlite3.sqlite_version_info >= (3, 35)
-IS_SQLITE_37 = IS_SQLITE and sqlite3.sqlite_version_info >= (3, 37)
 IS_SQLITE_53 = IS_SQLITE and sqlite3.sqlite_version_info >= (3, 53)
-IS_SQLITE_9 = IS_SQLITE and sqlite3.sqlite_version_info >= (3, 9)
+# The stdlib driver grew create_window_function in python 3.11. This applies
+# to the in-memory sqlite databases the tests build on every backend.
+HAS_WINDOW_FUNCTION = IS_CYSQLITE or sys.version_info >= (3, 11)
 IS_MYSQL_ADVANCED_FEATURES = False
 IS_MYSQL_JSON = False
 IS_ORACLE_MYSQL = False
@@ -337,11 +334,6 @@ def skip_unless_db(pred, reason='n/a'):
                 raise unittest.SkipTest(reason)
             return method(self)
         return inner
-    return decorator
-
-def slow_test():
-    def decorator(method):
-        return unittest.skipUnless(SLOW_TESTS, 'skipping slow test')(method)
     return decorator
 
 def requires_sqlite(method):
