@@ -130,6 +130,11 @@ IS_SQLITE_53 = IS_SQLITE and sqlite3.sqlite_version_info >= (3, 53)
 # The stdlib driver grew create_window_function in python 3.11. This applies
 # to the in-memory sqlite databases the tests build on every backend.
 HAS_WINDOW_FUNCTION = IS_CYSQLITE or sys.version_info >= (3, 11)
+# Driver flags: dispose-after-fork fails on both C connectors, and
+# mysql-connector forces a strict sql_mode on its sessions.
+IS_MYSQL_C_DRIVER = isinstance(db, (MariaDBConnectorDatabase,
+                                    MySQLConnectorDatabase))
+IS_MYSQL_CONNECTOR = isinstance(db, MySQLConnectorDatabase)
 IS_MYSQL_ADVANCED_FEATURES = False
 IS_MYSQL_JSON = False
 IS_ORACLE_MYSQL = False

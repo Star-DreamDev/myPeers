@@ -6,6 +6,7 @@ from peers import *
 from playhouse.sqlite_ext import *
 
 from .base import BaseTestCase
+from .base import IS_CYSQLITE
 from .base import ModelTestCase
 from .base import TestModel
 from .base import get_in_memory_db
@@ -27,6 +28,18 @@ try:
     CYTHON_EXTENSION = True
 except ImportError:
     CYTHON_EXTENSION = False
+
+# The cysqlite job runs the executing extension tests against cysqlite.
+# Every other job uses the stdlib driver above.
+if IS_CYSQLITE:
+    from playhouse.cysqlite_ext import CySqliteDatabase
+    ext_database = CySqliteDatabase('peers_test.db', timeout=100)
+    if CYTHON_EXTENSION:
+        # CySqliteDatabase's native rank functions include no bm25f.
+        from playhouse.sqlite_udf import bm25f
+        ext_database.register_function(bm25f, 'fts_bm25f')
+else:
+    ext_database = database
 
 
 class Post(TestModel):
@@ -164,7 +177,7 @@ class DT(TestModel):
 
 @skip_unless(json_installed(), 'requires sqlite json1')
 class TestJSONField(ModelTestCase):
-    database = database
+    database = ext_database
     requires = [KeyData]
 
     def test_schema(self):
@@ -331,7 +344,7 @@ class TestJSONField(ModelTestCase):
 
 @skip_unless(json_installed(), 'requires sqlite json1')
 class TestJSONFieldFunctions(ModelTestCase):
-    database = database
+    database = ext_database
     requires = [KeyData]
     test_data = [
         ('a', {'k1': 'v1', 'x1': {'y1': 'z1'}}),
@@ -743,7 +756,7 @@ class BaseFTSTestCase(object):
 
 
 class TestFullTextSearch(BaseFTSTestCase, ModelTestCase):
-    database = database
+    database = ext_database
     requires = [
         Post,
         ContentPost,
@@ -1233,7 +1246,7 @@ class TestFullTextSearch(BaseFTSTestCase, ModelTestCase):
 
 @skip_unless(FTS5Model.fts5_installed(), 'requires fts5')
 class TestFTS5(BaseFTSTestCase, ModelTestCase):
-    database = database
+    database = ext_database
     requires = [FTS5Test]
     test_corpus = (
         ('foo aa bb', 'aa bb cc ' * 10, 1),
@@ -1627,7 +1640,7 @@ class TestFTS5(BaseFTSTestCase, ModelTestCase):
 
 
 class TestRowIDField(ModelTestCase):
-    database = database
+    database = ext_database
     requires = [RowIDModel]
 
     def test_model_meta(self):
@@ -1671,7 +1684,7 @@ class TDecModel(TestModel):
 
 
 class TestTDecimalField(ModelTestCase):
-    database = database
+    database = ext_database
     requires = [TDecModel]
 
     def test_tdecimal_field(self):
@@ -1729,36 +1742,3 @@ class TestISODateTimeField(ModelTestCase):
 
         query = DT.select().where(DT.iso >= '2026-01-01')
         self.assertEqual([d.key for d in query], ['k2'])
-
-#
-# If we have cysqlite, let's run tests on it.
-#
-
-try:
-    from playhouse.cysqlite_ext import CySqliteDatabase
-except ImportError:
-    pass
-else:
-    cysqlite_database = CySqliteDatabase('peers_test.db', timeout=100)
-    if CYTHON_EXTENSION:
-        # CySqliteDatabase's native rank functions include no bm25f.
-        from playhouse.sqlite_udf import bm25f
-        cysqlite_database.register_function(bm25f, 'fts_bm25f')
-
-    test_cases = [
-        TestJSONField,
-        TestJSONFieldFunctions,
-        TestJSONBFieldFunctions,
-        TestSqliteExtensions,
-        TestFullTextSearch,
-        TestFTS5,
-        TestRowIDField,
-        TestISODateTimeField,
-        TestTDecimalField,
-    ]
-
-    for test_case in test_cases:
-        new_name = test_case.__name__ + 'CySqlite'
-        globals()[new_name] = type(new_name, (test_case,), {
-            'database': cysqlite_database})
-    del test_case  # Or the loader collects the last base class twice.

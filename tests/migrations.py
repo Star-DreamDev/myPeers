@@ -31,6 +31,7 @@ from .base import requires_pglike
 from .base import requires_postgresql
 from .base import requires_sqlite
 from .base import skip_if
+from .base import IS_MYSQL_CONNECTOR
 from .base import skip_unless
 
 try:
@@ -386,6 +387,7 @@ class TestSchemaMigration(ModelTestCase):
         self.test_rename_gh380(legacy=True)
 
     @skip_if(IS_PSYCOPG3, 'Psycopg3 chokes on the default value.')
+    @skip_if(IS_MYSQL_CONNECTOR, 'mysql-connector forces strict sql_mode')
     def test_add_default_drop_default(self):
         with self.database.transaction():
             migrate(self.migrator.add_column_default('person', 'first_name',

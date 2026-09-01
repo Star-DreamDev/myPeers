@@ -24,6 +24,7 @@ from .base import skip_unless
 from .base import BaseTestCase
 from .base import IS_CRDB
 from .base import IS_MYSQL
+from .base import IS_MYSQL_CONNECTOR
 from .base import IS_MYSQL_ADVANCED_FEATURES
 from .base import IS_ORACLE_MYSQL
 from .base import IS_POSTGRESQL
@@ -99,6 +100,7 @@ class TestModelAPIs(ModelTestCase):
         self.assertEqual(p_db.y, 3)
 
     @requires_models(Post, PostNote)
+    @skip_if(IS_MYSQL_CONNECTOR, 'mysql-connector forces strict sql_mode')
     def test_pk_is_fk(self):
         with self.database.atomic():
             p1 = Post.create(content='p1')
@@ -5838,6 +5840,8 @@ class TestForUpdateIntegration(ModelTestCase):
                  .execute())
         self.assertEqual(nrows, 2)
 
+    @skip_if(IS_MYSQL_CONNECTOR,
+             'mysql-connector times out instead of raising on NOWAIT')
     def test_for_update_nowait(self):
         User.create(username='huey')
         zaizee = User.create(username='zaizee')
@@ -6244,7 +6248,8 @@ class Reg(TestModel):
         )
 
 
-returning_support = db.returning_clause or IS_SQLITE_35
+# Mysql-family RETURNING is partial: no UPDATE form, no conflict targets.
+returning_support = (db.returning_clause and not IS_MYSQL) or IS_SQLITE_35
 
 
 @skip_unless(returning_support, 'database does not support RETURNING')

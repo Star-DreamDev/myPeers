@@ -39,6 +39,7 @@ from .base import requires_mysql
 from .base import requires_postgresql
 from .base import requires_sqlite
 from .base import skip_if
+from .base import IS_MYSQL_C_DRIVER
 from .base_models import Category
 from .base_models import Person
 from .base_models import Tweet
@@ -492,6 +493,7 @@ class TestDatabaseConnection(DatabaseTestCase):
             self.assertEqual(list(curs), [])
             self.database.execute_sql('drop table foo')
 
+    @skip_if(IS_MYSQL_C_DRIVER, 'C connections do not survive fork')
     @skip_unless(hasattr(os, 'fork'), 'requires fork')
     def test_dispose_after_fork(self):
         self.database.execute_sql('drop table if exists foo')
