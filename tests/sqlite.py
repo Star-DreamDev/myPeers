@@ -14,8 +14,6 @@ from .base import requires_models
 from .base import skip_unless
 from .base import skip_unless_db
 from .sqlite_helpers import compile_option
-from .sqlite_helpers import json_installed
-from .sqlite_helpers import json_patch_installed
 from .sqlite_helpers import json_text_installed
 from .sqlite_helpers import jsonb_installed
 
@@ -175,7 +173,6 @@ class DT(TestModel):
     iso = ISODateTimeField()
 
 
-@skip_unless(json_installed(), 'requires sqlite json1')
 class TestJSONField(ModelTestCase):
     database = ext_database
     requires = [KeyData]
@@ -342,7 +339,6 @@ class TestJSONField(ModelTestCase):
         self.assertEqual(kd.d0, 2)
 
 
-@skip_unless(json_installed(), 'requires sqlite json1')
 class TestJSONFieldFunctions(ModelTestCase):
     database = ext_database
     requires = [KeyData]
@@ -565,7 +561,6 @@ class TestJSONFieldFunctions(ModelTestCase):
                               ('n1', {'arr': ['i1', value]}),
                               ('n2', {'arr': ['i1', 'i2', value]})])
 
-    @skip_unless(json_patch_installed())
     def test_update(self):
         KeyData = self.M
         merged = KeyData.data.update({'x1': {'y1': 'z1-x', 'y3': 'z3'}})
@@ -578,7 +573,6 @@ class TestJSONFieldFunctions(ModelTestCase):
         self.assertData('a', {'k1': 'v1', 'x1': {'y1': 'z1-x', 'y3': 'z3'}})
         self.assertData('d', {'x1': {'y1': 'z1-x', 'y2': 'z2', 'y3': 'z3'}})
 
-    @skip_unless(json_patch_installed())
     def test_update_with_removal(self):
         KeyData = self.M
         m = KeyData.data.update({'k1': None, 'x1': {'y1': None, 'y3': 'z3'}})
@@ -589,7 +583,6 @@ class TestJSONFieldFunctions(ModelTestCase):
         self.assertData('a', {'x1': {'y3': 'z3'}})
         self.assertData('d', {'x1': {'y2': 'z2', 'y3': 'z3'}})
 
-    @skip_unless(json_patch_installed())
     def test_update_nested(self):
         KeyData = self.M
         merged = KeyData.data['x1'].update({'y1': 'z1-x', 'y3': 'z3'})
@@ -602,7 +595,6 @@ class TestJSONFieldFunctions(ModelTestCase):
         self.assertData('a', {'k1': 'v1', 'x1': {'y1': 'z1-x', 'y3': 'z3'}})
         self.assertData('d', {'x1': {'y1': 'z1-x', 'y2': 'z2', 'y3': 'z3'}})
 
-    @skip_unless(json_patch_installed())
     def test_updated_nested_with_removal(self):
         KeyData = self.M
         merged = KeyData.data['x1'].update({'o1': 'p1', 'y1': None})

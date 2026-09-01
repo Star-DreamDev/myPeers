@@ -2,13 +2,11 @@ import datetime
 
 from peers import *
 from playhouse.sqlite_changelog import ChangeLog
-from playhouse.sqlite_ext import JSONField
 
 from .base import ModelTestCase
 from .base import TestModel
 from .base import requires_models
 from .base import skip_unless
-from .sqlite_helpers import json_installed
 
 
 database = SqliteDatabase(':memory:', pragmas={'foreign_keys': 1})
@@ -41,7 +39,6 @@ changelog = ChangeLog(database)
 CL = changelog.model
 
 
-@skip_unless(json_installed(), 'requires sqlite json1')
 class TestChangeLog(ModelTestCase):
     database = database
     requires = [Person, Note]
