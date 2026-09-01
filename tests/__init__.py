@@ -1,6 +1,7 @@
 import sys
 import unittest
 
+from peers import ImproperlyConfigured
 from peers import NotSupportedError
 from peers import OperationalError
 
@@ -22,10 +23,7 @@ try:
     from .apsw_ext import *
 except ImportError:
     print('Unable to import APSW extension tests, skipping.')
-try:
-    from .cockroachdb import *
-except:
-    print('Unable to import CockroachDB tests, skipping.')
+from .cockroachdb import *
 try:
     from .cysqlite_ext import *
 except ImportError:
