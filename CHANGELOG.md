@@ -7,6 +7,11 @@ https://github.com/Star-DreamDev/peers/releases
 
 ## master
 
+* `EnumField` and `IntEnumField` validate member value types (`str` and
+  `int` respectively) at field construction.
+* Fix #3075, migration generation for `EnumField`. Generated migrations will
+  emit the storage field type (e.g. `IntegerField`) rather than `EnumField()`.
+
 [View commits](https://github.com/Star-DreamDev/peers/compare/4.5.0...master)
 
 ## 4.5.0

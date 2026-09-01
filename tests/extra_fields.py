@@ -3,6 +3,7 @@ import enum
 from peers import *
 from playhouse.fields import CompressedField
 from playhouse.fields import EnumField
+from playhouse.fields import EnumFieldMixin
 from playhouse.fields import IntEnumField
 from playhouse.fields import PickleField
 
@@ -107,3 +108,11 @@ class TestEnumField(ModelTestCase):
     def test_enum_field_invalid(self):
         self.assertRaises(ValueError, Enums.create, color='mauve')
         self.assertRaises(ValueError, Enums.create, prio=4)
+
+    def test_enum_member_validation(self):
+        self.assertRaises(ValueError, EnumField, Prio)
+        self.assertRaises(ValueError, IntEnumField, Color)
+
+        # A mixin subclass declaring no value type is not validated.
+        class FloatEnumField(EnumFieldMixin, FloatField): pass
+        FloatEnumField(Prio)

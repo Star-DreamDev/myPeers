@@ -1301,7 +1301,8 @@ Extra Field Types
    Stores members of an :class:`enum.Enum` with string values in a
    :class:`CharField`, storing ``member.value`` and returning the member.
    Unknown values are rejected with a ``ValueError`` on both the write and
-   comparison paths.
+   comparison paths. An enum whose values are not strings is rejected at
+   field construction. Use :class:`IntEnumField` for integer values.
 
    .. code-block:: python
 

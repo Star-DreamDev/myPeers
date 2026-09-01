@@ -7,6 +7,8 @@ import time
 import uuid
 
 from peers import *
+from playhouse.fields import EnumField
+from playhouse.fields import IntEnumField
 from playhouse.migrations import Runner
 from playhouse.migrations import template
 from playhouse.schema_diff import IndexDiff
@@ -536,6 +538,24 @@ def down(migrator, db):
     migrator.migrate(migrator.drop_table('sd_ext'))
 """
 
+# Enum fields render as their storage type, free of the enum class.
+ENUM_BODY = """\
+from peers import *
+
+def up(migrator, db):
+    class SdEnum(Model):
+        color = CharField(default='dark')
+        level = IntegerField()
+        class Meta:
+            database = db
+            table_name = 'sd_enum'
+    db.create_tables([SdEnum])
+
+
+def down(migrator, db):
+    migrator.migrate(migrator.drop_table('sd_enum'))
+"""
+
 @skip_if(IS_CRDB, 'crdb introspection differs')
 class TestTemplate(ModelTestCase):
     requires = SD_MODELS
@@ -649,6 +669,20 @@ class TestTemplate(ModelTestCase):
 
         body = template(diff_models(self.database, [SdExt]))
         self.assertEqual(strip_header(body), IMPORT_BODY)
+
+    def test_enum_field(self):
+        class SdColor(enum.IntEnum):
+            RED = 1
+
+        class SdShade(enum.Enum):
+            DARK = 'dark'
+
+        class SdEnum(TestModel):
+            color = EnumField(SdShade, default=SdShade.DARK)
+            level = IntEnumField(SdColor)
+
+        body = template(diff_models(self.database, [SdEnum]))
+        self.assertEqual(strip_header(body), ENUM_BODY)
 
 
 @skip_if(IS_CRDB, 'crdb introspection differs')

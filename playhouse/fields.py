@@ -58,7 +58,16 @@ class PickleField(BlobField):
 
 
 class EnumFieldMixin(object):
+    enum_value_type = None
+
     def __init__(self, enum_class, *args, **kwargs):
+        # Mismatched member values fail late and backend-dependently.
+        if self.enum_value_type is not None:
+            for member in enum_class:
+                if not isinstance(member.value, self.enum_value_type):
+                    raise ValueError('%s.%s value %r is not %s' % (
+                        enum_class.__name__, member.name, member.value,
+                        self.enum_value_type.__name__))
         self.enum_class = enum_class
         super(EnumFieldMixin, self).__init__(*args, **kwargs)
 
@@ -75,5 +84,8 @@ class EnumFieldMixin(object):
             super(EnumFieldMixin, self).python_value(value))
 
 
-class EnumField(EnumFieldMixin, CharField): pass
-class IntEnumField(EnumFieldMixin, IntegerField): pass
+class EnumField(EnumFieldMixin, CharField):
+    enum_value_type = str
+
+class IntEnumField(EnumFieldMixin, IntegerField):
+    enum_value_type = int
