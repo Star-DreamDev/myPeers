@@ -9,6 +9,7 @@ from peers import Node
 from peers import NodeList
 from peers import Psycopg2Adapter
 from peers import Psycopg3Adapter
+from peers import SelectBase
 from peers import __exception_wrapper__
 from playhouse.pool import _PooledPostgresqlDatabase
 
@@ -715,8 +716,8 @@ class PostgresqlExtDatabase(PostgresqlDatabase):
                 **context_options):
         ctx = self.get_sql_context(**context_options)
         sql, params = ctx.sql(query).query()
-        named_cursor = named_cursor or (self._server_side_cursors and
-                                        sql[:6].lower() == 'select')
+        named_cursor = named_cursor or (self._server_side_cursors and (
+            isinstance(query, SelectBase) or sql[:6].lower() == 'select'))
         cursor = self.execute_sql(sql, params, named_cursor=named_cursor)
         if named_cursor:
             cursor = FetchManyCursor(cursor, array_size)
