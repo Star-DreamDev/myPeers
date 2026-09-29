@@ -78,7 +78,7 @@ jobs:
       - name: cysqlite
         if: ${{ matrix.peers-backend == 'cysqlite' || matrix.peers-backend == 'sqlite' }}
         run: |
-          pip install -e 'git+https://github.com/coleifer/cysqlite#egg=cysqlite'
+          pip install cysqlite
       - name: runtests ${{ matrix.peers-backend }} - ${{ matrix.python-version }}
         env:
           PEERS_TEST_BACKEND: ${{ matrix.peers-backend }}
