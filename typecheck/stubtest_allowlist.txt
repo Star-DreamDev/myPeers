@@ -13,6 +13,7 @@ peers._ModelQueryHelper.models
 
 # Wrapped with @database_required which sometimes injects the database argument
 peers.BaseQuery.execute
+peers.ModelSelect.exists
 peers.SelectBase.count
 peers.SelectBase.exists
 peers.SelectBase.first
