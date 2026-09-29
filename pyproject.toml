@@ -8,7 +8,7 @@ requires = [
 [project]
 name = "peers"
 dynamic = ["version"]
-description = "Peers — a little ORM"
+description = "Peers - a little ORM"
 readme = "README.rst"
 authors = [
     { name = "Star-DreamDev", email = "runninginthespace@gmail.com" }

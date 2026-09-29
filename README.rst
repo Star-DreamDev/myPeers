@@ -1,5 +1,5 @@
-peers
-======
+Peers
+=====
 
 Peers is a simple and small ORM. It has few (but expressive) concepts, making
 it easy to learn and intuitive to use.
