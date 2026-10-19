@@ -22,14 +22,6 @@ from .base_models import Relationship
 from .base_models import User
 
 
-# ---------------------------------------------------------------------------
-# Module-local models for DDL generation tests.
-# Each exercises a specific schema feature (unique, sequence, indexes,
-# constraints, schema namespace, etc.).
-# ---------------------------------------------------------------------------
-
-# The DDL-asserting classes below pin an in-memory sqlite db, as the shared
-# backend would render SERIAL, AUTO_INCREMENT or backticks instead.
 
 class TMUnique(TestModel):
     data = TextField(unique=True)
