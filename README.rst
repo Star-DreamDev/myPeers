@@ -53,7 +53,7 @@ backends can be installed using the following instead:
     pip install peers[asyncpg]  # Install peers with asyncpg.
 
 Examples
---------
+---------
 
 Defining models is similar to Django or SQLAlchemy:
 
@@ -207,7 +207,6 @@ I've written a number of blog posts about building applications and web-services
 * `Analytics web service built with Flask and Peers <https://charlesleifer.com/blog/saturday-morning-hacks-building-an-analytics-app-with-flask/>`_.
 * `Personalized news digest (with a boolean query parser!) <https://charlesleifer.com/blog/saturday-morning-hack-personalized-news-digest-with-boolean-query-parser/>`_.
 * `Structuring Flask apps with Peers <https://charlesleifer.com/blog/structuring-flask-apps-a-how-to-for-those-coming-from-django/>`_.
-* `Creating a lastpass clone with Flask and Peers <https://charlesleifer.com/blog/creating-a-personal-password-manager/>`_.
 * `Creating a bookmarking web-service that takes screenshots of your bookmarks <https://charlesleifer.com/blog/building-bookmarking-service-python-and-phantomjs/>`_.
 * `Building a pastebin, wiki and a bookmarking service using Flask and Peers <https://charlesleifer.com/blog/dont-sweat-small-stuff-use-flask-blueprints/>`_.
 * `Encrypted databases with Python and SQLCipher <https://charlesleifer.com/blog/encrypted-sqlite-databases-with-python-and-sqlcipher/>`_.
